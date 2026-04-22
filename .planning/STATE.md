@@ -1,7 +1,7 @@
 # Project State
 
 **Last Updated: April 22, 2026**
-**Current Status: Phase 2 — Reporting & Output (Planned, ready to execute)**
+**Current Status: Phase 2 — Reporting & Output (✅ Complete)**
 
 ## Completed Work
 
@@ -16,7 +16,15 @@
 - ✓ CLI (`cmd/dns-discovery`) built with `cobra`
 - ✓ DNS enumeration, provider fingerprinting, TLS health, and email health integrated
 - ✓ UAT successful on github.com and cloudflare.com
-- ✓ `internal/report/markdown.go` — basic Markdown file output committed (SaveReport + GenerateMarkdown skeleton)
+
+### Phase 2: Reporting & Output (✓ Complete)
+- ✓ Markdown report enriched — all 6 sections match stdout output
+- ✓ DNS Records table (all 9 types, canonical order)
+- ✓ Detected Services section (email/hosting/verification)
+- ✓ Split DNS detail in Executive Summary and Infrastructure
+- ✓ MX Records table with priorities in Email Security
+- ✓ TLS version and days-to-expiry columns in TLS table
+- ✓ `output/` added to `.gitignore`
 
 ## Current Decisions
 
@@ -36,11 +44,11 @@
 - [x] Phase 1: Implement core discovery engine
 - [x] Phase 1: Integrate all 4 pillars into CLI
 - [x] Phase 1: Verify on github.com and cloudflare.com (UAT)
-- [ ] Phase 2: Enrich Markdown report to match stdout (DNS records table, services, split DNS, MX, TLS detail) — RPT-01/02/03
-- [ ] Phase 2: Add output/ to .gitignore
+- [x] Phase 2: Enrich Markdown report to match stdout — RPT-01/02/03
+- [x] Phase 2: Add output/ to .gitignore
 - [ ] Phase 3: Config file support
 - [ ] Phase 3: Batch mode
 
 ## Context Files
 - `.planning/ROADMAP.md` — Full roadmap with phases
-- `.planning/phases/02-reporting/02-01-PLAN.md` — Phase 2 execution plan
+- `.planning/phases/02-reporting/02-01-SUMMARY.md` — Phase 2 execution summary
