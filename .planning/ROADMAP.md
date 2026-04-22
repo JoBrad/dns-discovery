@@ -60,13 +60,13 @@ Plan list:
 
 **Goal:** Add config file support, batch processing, and resilient error handling for multi-domain runs.
 
-**Status:** In Planning
+**Status:** Built (verify pending)
 
 **Plans:** 2 plans
 
 Plan list:
-- [ ] 03-01-PLAN.md — Add YAML config loading, defaults, and CLI override precedence
-- [ ] 03-02-PLAN.md — Add batch domain processing and aggregate error reporting
+- [x] 03-01-PLAN.md — Add JSON config loading, defaults, and CLI override precedence
+- [x] 03-02-PLAN.md — Add batch domain processing and aggregate error reporting
 
 **Requirement IDs:** CFG-01, CFG-02, BAT-01, BAT-02, ERR-01
 
@@ -87,7 +87,7 @@ Plan list:
 |-------|-------|--------|-------|-------------|
 | 1 | CLI Tool Foundation | ✅ Complete | 2 | Core discovery engine + CLI |
 | 2 | Reporting & Output | ✅ Complete | 1 | Complete Markdown reports |
-| 3 | Integration & Polish | In Planning | 2 | Config, batch mode, error handling |
+| 3 | Integration & Polish | Built (verify pending) | 2 | Config, batch mode, error handling |
 
 ---
 
