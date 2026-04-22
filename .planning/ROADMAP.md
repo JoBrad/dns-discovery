@@ -35,12 +35,12 @@ Plan list:
 
 **Goal:** Enrich the Markdown report to match the full stdout output (DNS records table, detected services, split DNS detail, complete email/TLS sections) and ensure generated reports are gitignored.
 
-**Status:** In Planning
+**Status:** ✅ Complete
 
 **Plans:** 1 plan
 
 Plan list:
-- [ ] 02-01-PLAN.md — Enrich GenerateMarkdown to cover all stdout sections; add output/ to .gitignore
+- [x] 02-01-PLAN.md — Enrich GenerateMarkdown to cover all stdout sections; add output/ to .gitignore
 
 **Requirement IDs:** RPT-01, RPT-02, RPT-03
 
@@ -56,9 +56,28 @@ Plan list:
 
 ---
 
-### Phase 3: Integration & Polish (Planned)
+### Phase 3: Integration & Polish
 
-**Goal:** Add config file support, batch processing, advanced error handling.
+**Goal:** Add config file support, batch processing, and resilient error handling for multi-domain runs.
+
+**Status:** In Planning
+
+**Plans:** 2 plans
+
+Plan list:
+- [ ] 03-01-PLAN.md — Add YAML config loading, defaults, and CLI override precedence
+- [ ] 03-02-PLAN.md — Add batch domain processing and aggregate error reporting
+
+**Requirement IDs:** CFG-01, CFG-02, BAT-01, BAT-02, ERR-01
+
+**Dependencies:** Phase 2 complete
+
+**Deliverables:**
+- Optional config file support via `.dns-discovery.json` or `--config`
+- CLI flags override config values predictably
+- Batch processing from config or input file
+- Per-domain failures do not abort whole batch runs
+- Batch runs finish with a clear success/failure summary and non-zero exit on failures
 
 ---
 
@@ -67,8 +86,8 @@ Plan list:
 | Phase | Title | Status | Plans | Deliverable |
 |-------|-------|--------|-------|-------------|
 | 1 | CLI Tool Foundation | ✅ Complete | 2 | Core discovery engine + CLI |
-| 2 | Reporting & Output | In Planning | 1 | Complete Markdown reports |
-| 3 | Integration & Polish | Planned | — | Config, batch mode, error handling |
+| 2 | Reporting & Output | ✅ Complete | 1 | Complete Markdown reports |
+| 3 | Integration & Polish | In Planning | 2 | Config, batch mode, error handling |
 
 ---
 

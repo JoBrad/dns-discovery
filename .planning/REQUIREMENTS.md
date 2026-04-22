@@ -46,6 +46,22 @@
 
 ---
 
+### Phase 3: Integration & Polish
+
+**Phase Goal:** Add file-based configuration, batch execution across multiple domains, and clearer error handling for single and multi-domain runs.
+
+**Requirement IDs for Phase 3:**
+
+| ID | Category | Requirement | UAT |
+|---|---|---|---|
+| CFG-01 | Configuration | Tool loads settings from `.dns-discovery.json` or an explicit `--config` path | Running with config file applies configured output dir and domain list |
+| CFG-02 | Configuration | CLI flags override config values and defaults remain stable when config is absent | `--output-dir` beats config `output_dir`; command still works without config |
+| BAT-01 | Batch Mode | Tool processes multiple domains from config `domains:` list or `--input-file` | One invocation generates reports for all listed domains |
+| BAT-02 | Batch Resilience | Failure on one domain does not abort the whole batch | Mixed valid/invalid domain file still processes valid domains and reports failures |
+| ERR-01 | Error Handling | Invalid config/input errors are specific and actionable; batch runs end with aggregate success/failure summary | Bad config shows file/field context; batch run prints counts and exits non-zero if any failures |
+
+---
+
 ## Validation Approach
 
 **End-of-Phase Verification:** Run tool on github.com and cloudflare.com, verify all 4 categories (DNS, Providers, TLS, Email) produce correct output matching spike validation results.
