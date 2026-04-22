@@ -6,8 +6,11 @@ import (
 	"strings"
 
 	"github.com/jbradley/dns-discovery/internal/discovery"
+	"github.com/jbradley/dns-discovery/internal/report"
 	"github.com/spf13/cobra"
 )
+
+var outputDir string
 
 var rootCmd = &cobra.Command{
 	Use:   "dns-discovery <domain>",
@@ -19,6 +22,10 @@ and email DNS health for any domain.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return run(args[0])
 	},
+}
+
+func init() {
+	rootCmd.Flags().StringVarP(&outputDir, "output-dir", "o", "output", "Directory to save reports")
 }
 
 func main() {
@@ -60,6 +67,16 @@ func run(domain string) error {
 
 	// ── Email health ──────────────────────────────────────────────
 	emailResult := discovery.EvaluateEmailHealth(domain)
+
+	// Create result object for reporting
+	finalResult := &discovery.DiscoveryResult{
+		Domain:   domain,
+		DNS:      records,
+		Services: services,
+		Provider: providerResult,
+		TLS:      tlsResults,
+		Email:    emailResult,
+	}
 
 	// ═══════════════════════════════════════════════════════════════
 	// REPORT
@@ -124,28 +141,8 @@ func run(domain string) error {
 		fmt.Println("  None detected")
 	}
 
-	// TLS Health
-	fmt.Printf("\n%s\n  TLS Health\n%s\n", sep, sep)
-	if len(tlsResults) == 0 {
-		fmt.Println("  No A records found — TLS check skipped")
-	}
-	for _, t := range tlsResults {
-		fmt.Printf("  %s:\n", t.Hostname)
-		if t.ErrorCategory != "" {
-			fmt.Printf("     ✗  %s — %s\n", t.ErrorCategory, t.ErrorDetail)
-		} else if t.CertValid {
-			warning := ""
-			if t.ExpiryWarning {
-				warning = fmt.Sprintf("  ⚠  Expires soon!")
-			}
-			fmt.Printf("     ✓  Valid | %s | Expires: %s (%dd) | Issuer: %s%s\n",
-				t.TLSVersion, t.CertExpiry, t.DaysToExpiry, t.Issuer, warning)
-		}
-	}
-
 	// Email DNS Health
 	fmt.Printf("\n%s\n  Email DNS Health\n%s\n", sep, sep)
-
 	if len(emailResult.MXRecords) > 0 {
 		fmt.Printf("  MX Records (%d):\n", len(emailResult.MXRecords))
 		for _, mx := range emailResult.MXRecords {
@@ -154,7 +151,6 @@ func run(domain string) error {
 	} else {
 		fmt.Println("  MX: ✗ No MX records found")
 	}
-
 	printSPF(emailResult.SPF)
 	printDMARC(emailResult.DMARC)
 	printDKIM(emailResult.DKIM)
@@ -165,6 +161,26 @@ func run(domain string) error {
 	}
 	fmt.Printf("\n  Email Health Score: %s %s\n", emailResult.ScoreText, scoreIcon)
 
+	// TLS Health
+	fmt.Printf("\n%s\n  TLS Health\n%s\n", sep, sep)
+	if len(tlsResults) == 0 {
+		fmt.Println("  ✗ No A records found to check TLS")
+	} else {
+		for _, tr := range tlsResults {
+			status := "✓"
+			if !tr.CertValid || tr.CertExpired || tr.ExpiryWarning {
+				status = "⚠"
+			}
+			if !tr.Reachable {
+				status = "✗"
+			}
+			fmt.Printf("  %s %-20s (expires: %s, issuer: %s)\n", status, tr.Hostname, tr.CertExpiry, tr.Issuer)
+			if tr.ErrorDetail != "" {
+				fmt.Printf("      Error: %s (%s)\n", tr.ErrorCategory, tr.ErrorDetail)
+			}
+		}
+	}
+
 	// Executive Summary
 	fmt.Printf("\n%s\n  Executive Summary\n%s\n", sep, sep)
 	fmt.Printf("  Domain:    %s\n", domain)
@@ -174,7 +190,6 @@ func run(domain string) error {
 		fmt.Printf(" (split DNS — %d providers)", len(providerResult.Counts))
 	}
 	fmt.Println()
-
 	if len(tlsResults) > 0 {
 		t := tlsResults[0]
 		if t.CertValid {
@@ -183,10 +198,8 @@ func run(domain string) error {
 			fmt.Printf("  TLS:       ✗ %s\n", t.ErrorCategory)
 		}
 	}
-
 	fmt.Printf("  Email:     %s", emailResult.ScoreText)
 	if emailResult.Score < 4 {
-		fmt.Printf(" — missing:")
 		missing := []string{}
 		if len(emailResult.MXRecords) == 0 {
 			missing = append(missing, "MX")
@@ -200,9 +213,17 @@ func run(domain string) error {
 		if len(emailResult.DKIM) == 0 {
 			missing = append(missing, "DKIM")
 		}
-		fmt.Printf(" %s", strings.Join(missing, ", "))
+		fmt.Printf(" — missing: %s", strings.Join(missing, ", "))
 	}
 	fmt.Println()
+
+	// Save Report
+	reportPath, err := report.SaveReport(outputDir, finalResult)
+	if err != nil {
+		fmt.Printf("\n  ⚠  Failed to save report: %v\n", err)
+	} else {
+		fmt.Printf("\n  ✓ Report saved to: %s\n", reportPath)
+	}
 
 	fmt.Printf("\n%s\n\n", sep)
 	return nil

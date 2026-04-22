@@ -1,80 +1,47 @@
 # Project State
 
-**Last Updated:** April 21, 2026  
-**Current Status:** Initialized — Ready for Phase 1 Planning
+**Last Updated: April 22, 2026**
+**Current Status: Phase 2 - Reporting & Output (Complete)**
 
 ## Completed Work
 
-### Spike Validation (✓ All Complete)
+### Phase 1: CLI Tool Foundation (✓ Complete)
+- ✓ Core discovery engine (`internal/discovery/`) implemented.
+- ✓ CLI (`cmd/dns-discovery`) built with `cobra`.
+- ✓ DNS enumeration, provider fingerprinting, TLS health, and email health integrated.
+- ✓ UAT successful on github.com and cloudflare.com.
 
-- ✓ Spike 001: DNS Record Enumeration — VALIDATED
-- ✓ Spike 002: NS Registrar Fingerprinting — VALIDATED
-- ✓ Spike 003: TLS Health Check — VALIDATED
-- ✓ Spike 004: Email DNS Health — VALIDATED
-
-**Spike Findings Packaged:** `.github/skills/spike-findings-dns-discovery/SKILL.md`
-
-Findings include:
-- 4 implementation reference guides (references/)
-- 4 source spike files (sources/)
-- Stack decisions (miekg/dns library, crypto/tls, Go 1.23+)
-- Tested domains (github.com, cloudflare.com, google.com, badssl.com)
+### Phase 2: Reporting & Output (✓ Complete)
+- ✓ Markdown report generation (`internal/report/markdown.go`).
+- ✓ Output directory management (defaults to `output/<domain>/`).
+- ✓ `--output-dir` flag added to CLI.
+- ✓ Verified generation for google.com and others.
 
 ## Current Decisions
 
 ### Stack (Locked)
-
 - **Language:** Go 1.23+
-- **CLI Framework:** `cobra` (modern CLI framework for Go)
-- **DNS:** `miekg/dns` (VALIDATED ✓ in spike concepts, Go standard library equivalent)
-- **TLS:** `crypto/tls` (VALIDATED ✓ stdlib in spike 003)
-- **Pattern Matching:** `regexp` stdlib package (VALIDATED ✓ in spikes 001, 004)
-- **Output Format:** Markdown (per README.md)
+- **CLI Framework:** `cobra`
+- **DNS:** `miekg/dns`
+- **TLS:** `crypto/tls`
+- **Pattern Matching:** `regexp` stdlib
+- **Output Format:** Markdown
 
-### Architecture Pattern
-
-Four-pillar discovery architecture (from spikes):
-1. **DNS Enumeration** — Query all 9 record types
-2. **Provider Identification** — Map NS to friendly names
-3. **TLS Health** — Check certs and protocol versions
-4. **Email DNS Health** — MX/SPF/DMARC/DKIM validation
-
-Each pillar is independently testable; orchestrate in `internal/discovery/` package via `cmd/dns-discovery/main.go`.
-
-## Pending Decisions
-
-- **CLI Framework:** `cobra` selected for modern Go CLI experience
-- **Output Location:** `.output/` directory confirmed, structure TBD in Phase 2
-- **Batch Processing:** Deferred to Phase 3
+### Architecture
+- **Discovery Engine:** `internal/discovery` manages all health checks.
+- **Reporting:** `internal/report` handles Markdown generation and local file I/O.
 
 ## Project Todos
-
-- [ ] Phase 1: Implement core discovery engine
-- [ ] Phase 1: Integrate all 4 pillars into CLI
-- [ ] Phase 1: Verify on github.com and cloudflare.com (UAT)
-- [ ] Phase 2: Markdown report generation
-- [ ] Phase 2: Output directory management
+- [x] Phase 1: Implement core discovery engine
+- [x] Phase 1: Integrate all 4 pillars into CLI
+- [x] Phase 1: Verify on github.com and cloudflare.com (UAT)
+- [x] Phase 2: Markdown report generation (Plan 02-01)
+- [x] Phase 2: Output directory management (Plan 02-01)
+- [ ] Phase 2: mk-docs configuration (Future)
 - [ ] Phase 3: Config file support
 - [ ] Phase 3: Batch mode
 
-## Known Constraints
-
-- DKIM discovery is probe-based (27 common selectors) — some non-standard selectors may be missed
-- Split DNS detection depends on NS record count breakdown
-- Non-HTTPS A records timeout gracefully but provide limited info
-- TLS checks timeout after 5 seconds (configurable)
-
-## Blockers
-
-None currently.
-
 ## Context Files
-
-- `.planning/PROJECT.md` — Project vision and structure
-- `.planning/REQUIREMENTS.md` — Phase 1 requirements
 - `.planning/ROADMAP.md` — Full roadmap with phases
-- `.github/skills/spike-findings-dns-discovery/` — Packaged spike learnings
-
----
-
-*Project is ready for Phase 1 planning. Next step: `/gsd-plan-phase 1`*
+- `.planning/phases/02-reporting/01-CONTEXT.md` — Phase 2 Context
+- `.planning/phases/02-reporting/02-01-PLAN.md` — Markdown Report Plan
