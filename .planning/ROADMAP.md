@@ -22,7 +22,7 @@ Plan list:
 **Dependencies:** None — first phase
 
 **Deliverables:**
-- Core discovery engine (`axeman/core.py` and supporting modules)
+- Core discovery engine (`internal/discovery/` package and supporting modules)
 - CLI interface accepting domain argument
 - All health checks integrated
 - Output formatting (stdout printing)

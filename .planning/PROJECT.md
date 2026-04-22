@@ -10,7 +10,7 @@ Build a DNS zone discovery tool that, given a domain name, produces an executive
 
 ## Core Deliverable
 
-A CLI-first Python tool (`dns-discovery <domain>`) that outputs a Markdown report to the `output/` directory with:
+A CLI-first Go tool (`dns-discovery <domain>`) that outputs a Markdown report to the `output/` directory with:
 
 1. **Zone Overview** — Quick executive summary
 2. **Registrar & Nameservers** — Friendly provider names + split DNS detection
@@ -32,23 +32,28 @@ Findings packaged in `.github/skills/spike-findings-dns-discovery/SKILL.md`
 
 ### Stack (Validated)
 
-- **Language**: Python 3.14.2
-- **CLI Framework**: `click` (for CLI interaction)
-- **DNS**: `dnspython` v2.6+ (proven across all 4 spikes)
-- **TLS**: stdlib `ssl` (no external dependency)
-- **Pattern Matching**: stdlib `re`
+- **Language**: Go 1.23+
+- **CLI Framework**: `cobra` (modern CLI framework for Go)
+- **DNS**: `miekg/dns` Go library (equivalent to dnspython in functionality)
+- **TLS**: `crypto/tls` stdlib (no external dependency)
+- **Pattern Matching**: `regexp` stdlib package
 - **Output**: Markdown to `output/` directory, eventual HTML via mk-docs
 
 ## Project Structure
 
 ```
 .
-├── main.py                    # Entry point (CLI setup)
-├── axeman/
-│   ├── __init__.py
-│   ├── core.py               # Main discovery orchestration
-│   ├── certlib.py            # TLS/certificate logic
-│   └── [other modules]       # DNS, provider, email modules
+├── main.go                    # Entry point (CLI setup)
+├── cmd/
+│   └── dns-discovery/         # CLI command package
+│       └── main.go            # Entry point
+├── internal/
+│   ├── discovery/             # Core discovery logic
+│   │   ├── dns.go             # DNS enumeration
+│   │   ├── providers.go       # Provider fingerprinting
+│   │   ├── tls.go             # TLS health checks
+│   │   └── email.go           # Email DNS health validation
+│   └── output/                # Output formatting
 ├── output/                    # Generated reports
 ├── .planning/
 │   ├── PROJECT.md (this file)
@@ -61,6 +66,8 @@ Findings packaged in `.github/skills/spike-findings-dns-discovery/SKILL.md`
 │       ├── 02-reporting/
 │       ├── 03-integration/
 │       └── ...
+├── go.mod                     # Go module definition
+├── go.sum                     # Go dependency checksums
 └── README.md
 ```
 

@@ -17,18 +17,18 @@
 Findings include:
 - 4 implementation reference guides (references/)
 - 4 source spike files (sources/)
-- Stack decisions (dnspython, stdlib ssl/re, Python 3.14.2)
+- Stack decisions (miekg/dns library, crypto/tls, Go 1.23+)
 - Tested domains (github.com, cloudflare.com, google.com, badssl.com)
 
 ## Current Decisions
 
 ### Stack (Locked)
 
-- **Language:** Python 3.14.2
-- **CLI Framework:** `click` (pending decision in Phase 1 planning)
-- **DNS:** `dnspython` v2.6+ (VALIDATED ✓ in all 4 spikes)
-- **TLS:** stdlib `ssl` (VALIDATED ✓ in spike 003)
-- **Pattern Matching:** stdlib `re` (VALIDATED ✓ in spikes 001, 004)
+- **Language:** Go 1.23+
+- **CLI Framework:** `cobra` (modern CLI framework for Go)
+- **DNS:** `miekg/dns` (VALIDATED ✓ in spike concepts, Go standard library equivalent)
+- **TLS:** `crypto/tls` (VALIDATED ✓ stdlib in spike 003)
+- **Pattern Matching:** `regexp` stdlib package (VALIDATED ✓ in spikes 001, 004)
 - **Output Format:** Markdown (per README.md)
 
 ### Architecture Pattern
@@ -39,12 +39,12 @@ Four-pillar discovery architecture (from spikes):
 3. **TLS Health** — Check certs and protocol versions
 4. **Email DNS Health** — MX/SPF/DMARC/DKIM validation
 
-Each pillar is independently testable; orchestrate in `axeman/core.py`.
+Each pillar is independently testable; orchestrate in `internal/discovery/` package via `cmd/dns-discovery/main.go`.
 
 ## Pending Decisions
 
-- **CLI Framework:** `click` vs custom argparse vs other (to be decided in Phase 1 planning)
-- **Output Location:** `.output/` directory name confirmed, but structure TBD in Phase 2
+- **CLI Framework:** `cobra` selected for modern Go CLI experience
+- **Output Location:** `.output/` directory confirmed, structure TBD in Phase 2
 - **Batch Processing:** Deferred to Phase 3
 
 ## Project Todos

@@ -50,10 +50,11 @@ Four independent discovery pillars, each proven in spike work:
 These came from spike validation and are NON-NEGOTIABLE:
 
 ### Stack Choices
-- **DNS library:** `dnspython` v2.6+ (proven in all 4 spikes, clean exception handling, no external resolvers needed)
-- **TLS:** stdlib `ssl` only (no third-party library, full chain validation, OpenSSL error codes work)
-- **Pattern matching:** stdlib `re` (sufficient for SPF/DMARC/DKIM syntax)
-- **Python version:** 3.14.2 (asyncio.Runner support, modern syntax)
+- **DNS library:** `miekg/dns` Go package (equivalent functionality to dnspython, used extensively in Go ecosystem)
+- **TLS:** stdlib `crypto/tls` only (no third-party library, full chain validation, error codes via Go's x509 package)
+- **Pattern matching:** stdlib `regexp` package (sufficient for SPF/DMARC/DKIM syntax)
+- **Go version:** 1.23+ (modern syntax, excellent standard library)
+- **CLI Framework:** `cobra` (modern CLI framework with subcommands, flags, help)
 - **Output format:** Markdown to stdout and `output/` directory (per README.md)
 
 ### Provider Table
@@ -108,8 +109,9 @@ Decisions to be made during implementation:
 - **Decision:** To be finalized during Phase 1 planning based on simplicity/features needed
 
 ### Module Organization
-- **Current structure:** `axeman/` package with `__init__.py`, `core.py`, `certlib.py`
-- **Decision:** Organize remaining modules (dns.py, providers.py, email.py, output.py) during planning
+- **Current structure:** Go project with `cmd/` for CLI and `internal/discovery/` for core logic
+- **CLI Framework:** `cobra` with main entry in `cmd/dns-discovery/main.go`
+- **Discovery packages:** Organize modules in `internal/discovery/` (dns.go, providers.go, tls.go, email.go)
 
 ### Output Structure (Phase 1)
 - **Scope:** Print to stdout with readable formatting (sections, emoji, summaries)
