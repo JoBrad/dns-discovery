@@ -12,10 +12,11 @@
 
 **Status:** Ready for Planning
 
-**Plans:** 1 plan planned
+**Plans:** 2 plans planned
 
 Plan list:
-- [ ] 01-01-PLAN.md — Implement core discovery logic
+- [ ] 01-01-PLAN.md — Build Go CLI foundation, DNS enumeration, and provider fingerprinting
+- [ ] 01-02-PLAN.md — Add TLS/email health pillars and render executive summary
 
 **Requirement IDs:** CLI-01, ENUM-01, ENUM-02, PROV-01, PROV-02, PROV-03, EMAIL-01, EMAIL-02, EMAIL-03, EMAIL-04, EMAIL-05, TLS-01, TLS-02, TLS-03, TLS-04, OUT-01, OUT-02
 
