@@ -1,31 +1,60 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
-	"github.com/jbradley/dns-discovery/internal/discovery"
-	"github.com/jbradley/dns-discovery/internal/report"
+	"github.com/jbradley/dns-discovery/internal/app"
+	appconfig "github.com/jbradley/dns-discovery/internal/config"
 	"github.com/spf13/cobra"
 )
 
 var outputDir string
+var configPath string
+var inputFile string
+
+const defaultConfigFile = ".dns-discovery.json"
 
 var rootCmd = &cobra.Command{
-	Use:   "dns-discovery <domain>",
+	Use:   "dns-discovery [domain]",
 	Short: "DNS zone discovery tool",
 	Long: `Discover DNS configuration, provider fingerprint, TLS health,
 and email DNS health for any domain.`,
-	Args:         cobra.ExactArgs(1),
+	Args:         cobra.MaximumNArgs(1),
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return run(args[0])
+		cfg, err := loadRuntimeConfig(configPath)
+		if err != nil {
+			return err
+		}
+
+		resolved := appconfig.Resolve(outputDir, cmd.Flags().Changed("output-dir"), cfg)
+		domains, err := resolveDomains(args, inputFile, cfg)
+		if err != nil {
+			return err
+		}
+
+		if len(domains) == 1 {
+			return app.RunDomain(domains[0], resolved.OutputDir)
+		}
+
+		summary := app.RunBatch(domains, resolved.OutputDir)
+		printBatchSummary(summary)
+		if len(summary.Failed) > 0 {
+			return fmt.Errorf("batch completed with %d failed domain(s)", len(summary.Failed))
+		}
+
+		return nil
 	},
 }
 
 func init() {
-	rootCmd.Flags().StringVarP(&outputDir, "output-dir", "o", "output", "Directory to save reports")
+	rootCmd.Flags().StringVarP(&outputDir, "output-dir", "o", appconfig.DefaultOutputDir, "Directory to save reports")
+	rootCmd.Flags().StringVar(&configPath, "config", "", "Path to JSON config file")
+	rootCmd.Flags().StringVar(&inputFile, "input-file", "", "Path to newline-delimited domains file")
 }
 
 func main() {
@@ -35,243 +64,93 @@ func main() {
 	}
 }
 
-func run(domain string) error {
-	domain = strings.TrimSpace(strings.ToLower(domain))
+func loadRuntimeConfig(explicitPath string) (appconfig.Config, error) {
+	if strings.TrimSpace(explicitPath) != "" {
+		return appconfig.Load(explicitPath)
+	}
 
-	sep := strings.Repeat("=", 60)
+	if _, err := os.Stat(defaultConfigFile); err == nil {
+		return appconfig.Load(defaultConfigFile)
+	} else if !os.IsNotExist(err) {
+		return appconfig.Config{}, fmt.Errorf("check config %q: %w", defaultConfigFile, err)
+	}
 
-	fmt.Printf("\n%s\n", sep)
-	fmt.Printf("  DNS Zone Discovery: %s\n", domain)
-	fmt.Printf("%s\n\n", sep)
+	return appconfig.Config{}, nil
+}
 
-	// ── DNS enumeration ──────────────────────────────────────────
-	fmt.Println("Querying DNS records...")
-	records, err := discovery.QueryAllRecords(domain)
+func resolveDomains(args []string, inputPath string, cfg appconfig.Config) ([]string, error) {
+	if len(args) > 0 {
+		domain := strings.TrimSpace(strings.ToLower(args[0]))
+		if domain == "" {
+			return nil, fmt.Errorf("domain argument must not be empty")
+		}
+		return []string{domain}, nil
+	}
+
+	if strings.TrimSpace(inputPath) != "" {
+		return loadDomainsFromFile(inputPath)
+	}
+
+	if len(cfg.Domains) > 0 {
+		domains := make([]string, 0, len(cfg.Domains))
+		for _, domain := range cfg.Domains {
+			domains = append(domains, strings.ToLower(domain))
+		}
+		return domains, nil
+	}
+
+	return nil, fmt.Errorf("no domains provided: pass a domain argument, --input-file, or config domains in %s", defaultConfigFile)
+}
+
+func loadDomainsFromFile(path string) ([]string, error) {
+	file, err := os.Open(path)
 	if err != nil {
-		return fmt.Errorf("  ERROR: %w", err)
+		return nil, fmt.Errorf("read input file %q: %w", path, err)
 	}
+	defer file.Close()
 
-	services := discovery.DetectServices(records)
-
-	// ── Provider fingerprinting ───────────────────────────────────
-	nsHosts := records["NS"]
-	providerResult := discovery.IdentifyProviders(domain, nsHosts)
-
-	// ── TLS check (A record targets) ─────────────────────────────
-	var tlsResults []discovery.TLSResult
-	for _, aRecord := range records["A"] {
-		tlsResults = append(tlsResults, discovery.CheckTLS(domain))
-		_ = aRecord
-		break // One TLS check per domain (use the domain name, not raw IP)
-	}
-
-	// ── Email health ──────────────────────────────────────────────
-	emailResult := discovery.EvaluateEmailHealth(domain)
-
-	// Create result object for reporting
-	finalResult := &discovery.DiscoveryResult{
-		Domain:   domain,
-		DNS:      records,
-		Services: services,
-		Provider: providerResult,
-		TLS:      tlsResults,
-		Email:    emailResult,
-	}
-
-	// ═══════════════════════════════════════════════════════════════
-	// REPORT
-	// ═══════════════════════════════════════════════════════════════
-
-	// Nameserver Providers
-	fmt.Printf("\n%s\n  Nameserver Providers\n%s\n", sep, sep)
-	fmt.Printf("  Primary provider: %s\n", providerResult.Primary)
-	if providerResult.IsSplit {
-		fmt.Println("  ⚠  Split DNS detected:")
-		for provider, count := range providerResult.Counts {
-			fmt.Printf("     • %s (%d NS records)\n", provider, count)
-		}
-	}
-	if len(nsHosts) > 0 {
-		fmt.Println("\n  Nameservers:")
-		for _, ns := range nsHosts {
-			fmt.Printf("     %s\n", ns)
-		}
-	}
-
-	// DNS Records
-	fmt.Printf("\n%s\n  DNS Records\n%s\n", sep, sep)
-	recordOrder := []string{"A", "AAAA", "MX", "NS", "TXT", "CNAME", "SOA", "CAA", "SRV"}
-	for _, rtype := range recordOrder {
-		recs := records[rtype]
-		if len(recs) == 0 {
-			fmt.Printf("  %-6s  — not configured\n", rtype)
+	var domains []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
 			continue
 		}
-		fmt.Printf("  %-6s  (%d record(s)):\n", rtype, len(recs))
-		for _, r := range recs {
-			fmt.Printf("           %s\n", r)
-		}
+		domains = append(domains, strings.ToLower(line))
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("read input file %q: %w", path, err)
+	}
+	if len(domains) == 0 {
+		return nil, fmt.Errorf("input file %q did not contain any domains", path)
 	}
 
-	// Detected Services
-	fmt.Printf("\n%s\n  Detected Services\n%s\n", sep, sep)
-	anyServices := false
-	if len(services.Email) > 0 {
-		fmt.Println("  Email Providers:")
-		for _, s := range services.Email {
-			fmt.Printf("     • %s\n", s)
-		}
-		anyServices = true
-	}
-	if len(services.HostingCDN) > 0 {
-		fmt.Println("  Hosting / CDN:")
-		for _, s := range services.HostingCDN {
-			fmt.Printf("     • %s\n", s)
-		}
-		anyServices = true
-	}
-	if len(services.VerificationServices) > 0 {
-		fmt.Println("  Verification / SaaS:")
-		for _, s := range services.VerificationServices {
-			fmt.Printf("     • %s\n", s)
-		}
-		anyServices = true
-	}
-	if !anyServices {
-		fmt.Println("  None detected")
-	}
-
-	// Email DNS Health
-	fmt.Printf("\n%s\n  Email DNS Health\n%s\n", sep, sep)
-	if len(emailResult.MXRecords) > 0 {
-		fmt.Printf("  MX Records (%d):\n", len(emailResult.MXRecords))
-		for _, mx := range emailResult.MXRecords {
-			fmt.Printf("     %s\n", mx)
-		}
-	} else {
-		fmt.Println("  MX: ✗ No MX records found")
-	}
-	printSPF(emailResult.SPF)
-	printDMARC(emailResult.DMARC)
-	printDKIM(emailResult.DKIM)
-
-	scoreIcon := "✗"
-	if emailResult.Score == 4 {
-		scoreIcon = "✓"
-	}
-	fmt.Printf("\n  Email Health Score: %s %s\n", emailResult.ScoreText, scoreIcon)
-
-	// TLS Health
-	fmt.Printf("\n%s\n  TLS Health\n%s\n", sep, sep)
-	if len(tlsResults) == 0 {
-		fmt.Println("  ✗ No A records found to check TLS")
-	} else {
-		for _, tr := range tlsResults {
-			status := "✓"
-			if !tr.CertValid || tr.CertExpired || tr.ExpiryWarning {
-				status = "⚠"
-			}
-			if !tr.Reachable {
-				status = "✗"
-			}
-			fmt.Printf("  %s %-20s (expires: %s, issuer: %s)\n", status, tr.Hostname, tr.CertExpiry, tr.Issuer)
-			if tr.ErrorDetail != "" {
-				fmt.Printf("      Error: %s (%s)\n", tr.ErrorCategory, tr.ErrorDetail)
-			}
-		}
-	}
-
-	// Executive Summary
-	fmt.Printf("\n%s\n  Executive Summary\n%s\n", sep, sep)
-	fmt.Printf("  Domain:    %s\n", domain)
-	fmt.Printf("  DNS:       %d record type(s) configured\n", len(records))
-	fmt.Printf("  Provider:  %s", providerResult.Primary)
-	if providerResult.IsSplit {
-		fmt.Printf(" (split DNS — %d providers)", len(providerResult.Counts))
-	}
-	fmt.Println()
-	if len(tlsResults) > 0 {
-		t := tlsResults[0]
-		if t.CertValid {
-			fmt.Printf("  TLS:       ✓ Valid (%s, %dd until expiry)\n", t.TLSVersion, t.DaysToExpiry)
-		} else {
-			fmt.Printf("  TLS:       ✗ %s\n", t.ErrorCategory)
-		}
-	}
-	fmt.Printf("  Email:     %s", emailResult.ScoreText)
-	if emailResult.Score < 4 {
-		missing := []string{}
-		if len(emailResult.MXRecords) == 0 {
-			missing = append(missing, "MX")
-		}
-		if !emailResult.SPF.Present {
-			missing = append(missing, "SPF")
-		}
-		if !emailResult.DMARC.Present {
-			missing = append(missing, "DMARC")
-		}
-		if len(emailResult.DKIM) == 0 {
-			missing = append(missing, "DKIM")
-		}
-		fmt.Printf(" — missing: %s", strings.Join(missing, ", "))
-	}
-	fmt.Println()
-
-	// Save Report
-	reportPath, err := report.SaveReport(outputDir, finalResult)
-	if err != nil {
-		fmt.Printf("\n  ⚠  Failed to save report: %v\n", err)
-	} else {
-		fmt.Printf("\n  ✓ Report saved to: %s\n", reportPath)
-	}
-
-	fmt.Printf("\n%s\n\n", sep)
-	return nil
+	return domains, nil
 }
 
-func printSPF(spf discovery.SPFResult) {
-	if !spf.Present {
-		fmt.Println("  SPF:  ✗ No SPF record found")
-		return
-	}
-	icon := "✓"
-	if spf.Insecure || len(spf.Issues) > 0 {
-		icon = "⚠"
-	}
-	fmt.Printf("  SPF:  %s %s (%s)\n", icon, spf.Record, spf.Policy)
-	for _, issue := range spf.Issues {
-		fmt.Printf("          ⚠  %s\n", issue)
-	}
-}
+func printBatchSummary(summary app.BatchSummary) {
+	sep := strings.Repeat("=", 60)
+	fmt.Printf("\n%s\n  Batch Summary\n%s\n", sep, sep)
+	fmt.Printf("  Total:      %d\n", summary.Total())
+	fmt.Printf("  Succeeded:  %d\n", len(summary.Succeeded))
+	fmt.Printf("  Failed:     %d\n", len(summary.Failed))
 
-func printDMARC(dmarc discovery.DMARCResult) {
-	if !dmarc.Present {
-		fmt.Println("  DMARC: ✗ No DMARC record found")
-		return
-	}
-	icon := "✓"
-	if dmarc.Policy == "none" {
-		icon = "⚠"
-	}
-	rua := ""
-	if !dmarc.HasAggReports {
-		rua = " (no rua= reporting)"
-	}
-	fmt.Printf("  DMARC: %s p=%s%s\n", icon, dmarc.Policy, rua)
-}
-
-func printDKIM(selectors []discovery.DKIMSelector) {
-	if len(selectors) == 0 {
-		fmt.Println("  DKIM:  ✗ No DKIM selectors found (probed 27 common selectors)")
-		return
-	}
-	names := make([]string, 0, len(selectors))
-	for _, s := range selectors {
-		name := s.Selector
-		if s.Revoked {
-			name += "(revoked)"
+	if len(summary.Failed) > 0 {
+		fmt.Println("\n  Failed Domains:")
+		failedDomains := summary.FailedDomains()
+		for _, domain := range failedDomains {
+			fmt.Printf("     • %s: %v\n", domain, summary.Failed[domain])
 		}
-		names = append(names, name)
 	}
-	fmt.Printf("  DKIM:  ✓ %d selector(s) found: %s\n", len(selectors), strings.Join(names, ", "))
+
+	if len(summary.Succeeded) > 0 {
+		succeeded := append([]string(nil), summary.Succeeded...)
+		sort.Strings(succeeded)
+		fmt.Println("\n  Succeeded Domains:")
+		for _, domain := range succeeded {
+			fmt.Printf("     • %s\n", domain)
+		}
+	}
+
+	fmt.Printf("\n%s\n", sep)
 }
