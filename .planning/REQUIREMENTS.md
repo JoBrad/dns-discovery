@@ -1,6 +1,6 @@
 # Project Requirements
 
-**Last Updated:** April 21, 2026
+**Last Updated:** April 22, 2026
 
 ## Phase Requirements
 
@@ -29,6 +29,22 @@
 | TLS-04 | Graceful Non-HTTPS | Handle A records pointing to non-HTTPS services | Timeout/refused handled without crash |
 | OUT-01 | Output Structure | Organize discovery results in memory (not yet written to disk) | All checks complete, results available |
 | OUT-02 | Readable Summary | Present zone overview in human-readable format | Print to stdout with sections and formatting |
+
+---
+
+### Phase 2: Reporting & Output
+
+**Phase Goal:** Enrich the Markdown report file to match the full information presented on stdout, and gitignore generated output.
+
+**Requirement IDs for Phase 2:**
+
+| ID | Category | Requirement | UAT |
+|---|---|---|---|
+| RPT-01 | Report Completeness | Markdown report includes DNS records table (all 9 types with values) | `report.md` has DNS Records section with A/MX/NS/TXT etc. |
+| RPT-02 | Report Completeness | Markdown report includes detected services (email providers, hosting/CDN, verification SaaS) | `report.md` has Detected Services section matching stdout |
+| RPT-03 | Report Completeness | Markdown report includes split DNS detail, MX records with priorities, TLS version and days-to-expiry | All three fields present in generated report for github.com |
+
+---
 
 ## Validation Approach
 

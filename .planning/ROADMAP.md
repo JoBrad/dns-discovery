@@ -2,7 +2,7 @@
 
 **Project:** DNS Zone Discovery Tool  
 **Version:** 1.0  
-**Last Updated:** April 21, 2026
+**Last Updated:** April 22, 2026
 
 ## Milestone 1: Core Implementation
 
@@ -10,20 +10,20 @@
 
 **Goal:** Build the core discovery engine with DNS enumeration, provider identification, TLS checks, and email health validation integrated into a working CLI.
 
-**Status:** Ready for Planning
+**Status:** ✅ Complete
 
-**Plans:** 2 plans planned
+**Plans:** 2 plans
 
 Plan list:
-- [ ] 01-01-PLAN.md — Build Go CLI foundation, DNS enumeration, and provider fingerprinting
-- [ ] 01-02-PLAN.md — Add TLS/email health pillars and render executive summary
+- [x] 01-01-PLAN.md — Build Go CLI foundation, DNS enumeration, and provider fingerprinting
+- [x] 01-02-PLAN.md — Add TLS/email health pillars and render executive summary
 
 **Requirement IDs:** CLI-01, ENUM-01, ENUM-02, PROV-01, PROV-02, PROV-03, EMAIL-01, EMAIL-02, EMAIL-03, EMAIL-04, EMAIL-05, TLS-01, TLS-02, TLS-03, TLS-04, OUT-01, OUT-02
 
 **Dependencies:** None — first phase
 
 **Deliverables:**
-- Core discovery engine (`internal/discovery/` package and supporting modules)
+- Core discovery engine (`internal/discovery/` package)
 - CLI interface accepting domain argument
 - All health checks integrated
 - Output formatting (stdout printing)
@@ -31,16 +31,28 @@ Plan list:
 
 ---
 
-### Phase 2: Reporting & Output (Planned)
+### Phase 2: Reporting & Output
 
-**Goal:** Convert discovery results into formatted Markdown reports, write to `output/` directory, and set up HTML generation via mk-docs.
+**Goal:** Enrich the Markdown report to match the full stdout output (DNS records table, detected services, split DNS detail, complete email/TLS sections) and ensure generated reports are gitignored.
 
-**Status:** Planned
+**Status:** In Planning
+
+**Plans:** 1 plan
+
+Plan list:
+- [ ] 02-01-PLAN.md — Enrich GenerateMarkdown to cover all stdout sections; add output/ to .gitignore
+
+**Requirement IDs:** RPT-01, RPT-02, RPT-03
+
+**Dependencies:** Phase 1 complete
 
 **Deliverables:**
-- Markdown report generation
-- `output/` directory management
-- mk-docs configuration for HTML (future)
+- Markdown report includes DNS records table (all 9 types)
+- Markdown report includes detected services (email, hosting/CDN, verification)
+- Markdown report includes split DNS detail
+- Markdown report includes MX records with priorities
+- Markdown report includes TLS version and days-to-expiry
+- `output/` directory is gitignored
 
 ---
 
@@ -54,10 +66,10 @@ Plan list:
 
 | Phase | Title | Status | Plans | Deliverable |
 |-------|-------|--------|-------|-------------|
-| 1 | CLI Tool Foundation | Ready for Planning | 1 | Core discovery engine + CLI |
-| 2 | Reporting & Output | Planned | — | Markdown reports + output |
+| 1 | CLI Tool Foundation | ✅ Complete | 2 | Core discovery engine + CLI |
+| 2 | Reporting & Output | In Planning | 1 | Complete Markdown reports |
 | 3 | Integration & Polish | Planned | — | Config, batch mode, error handling |
 
 ---
 
-*Initialized from README.md and spike validation results. Phase 1 ready for detailed planning.*
+*Initialized from README.md and spike validation results. Phase 1 complete.*
