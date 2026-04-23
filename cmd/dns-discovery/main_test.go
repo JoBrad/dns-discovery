@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	appconfig "github.com/jbradley/dns-discovery/internal/config"
 )
 
 // Verifies plain text domain lists are accepted and normalized to lowercase.
@@ -83,5 +85,29 @@ func TestLoadDomainsFromFileRejectsNonTextContent(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "invalid domain") {
 		t.Fatalf("expected invalid domain error, got %v", err)
+	}
+}
+
+func TestResolveDomainsPrefersPositionalArgument(t *testing.T) {
+	cfg := appconfig.Config{Domains: []string{"config.example.com"}}
+
+	domains, err := resolveDomains([]string{"Example.com"}, "", cfg)
+	if err != nil {
+		t.Fatalf("resolve domains: %v", err)
+	}
+	if len(domains) != 1 || domains[0] != "example.com" {
+		t.Fatalf("expected positional domain to win, got %#v", domains)
+	}
+}
+
+func TestResolveDomainsUsesConfigDomainsWhenNoArgsOrFile(t *testing.T) {
+	cfg := appconfig.Config{Domains: []string{"GitHub.com", "Cloudflare.com"}}
+
+	domains, err := resolveDomains(nil, "", cfg)
+	if err != nil {
+		t.Fatalf("resolve domains: %v", err)
+	}
+	if len(domains) != 2 || domains[0] != "github.com" || domains[1] != "cloudflare.com" {
+		t.Fatalf("expected lowercased config domains, got %#v", domains)
 	}
 }
