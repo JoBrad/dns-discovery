@@ -2,76 +2,30 @@ package app
 
 import (
 	"errors"
+	"path/filepath"
 	"testing"
+
+	"github.com/jbradley/dns-discovery/internal/discovery"
 )
 
-// Verifies that RunDomain delegates to the injected runner seam instead of
-// directly calling executeDomain. It also asserts that domain/output arguments
-// are forwarded unchanged and that a successful runner returns nil.
-func TestRunDomainDelegatesToRunner(t *testing.T) {
-	original := testHookDomainRunner
-	defer func() {
-		testHookDomainRunner = original
-	}()
+type noopLogger struct{}
 
-	called := false
-	testHookDomainRunner = func(domain string, outputDir string) error {
-		called = true
-		if domain != "github.com" {
-			t.Fatalf("unexpected domain: %q", domain)
-		}
-		if outputDir != "reports" {
-			t.Fatalf("unexpected output dir: %q", outputDir)
-		}
-		return nil
-	}
+func (noopLogger) Infof(string, ...any) {}
+func (noopLogger) Errorf(string, ...any) {}
+func (noopLogger) Close() error { return nil }
 
-	if err := RunDomain("github.com", "reports"); err != nil {
-		t.Fatalf("run domain: %v", err)
-	}
-	if !called {
-		t.Fatal("expected domain runner to be called")
-	}
-}
+func withRunDiscoveryHooks(t *testing.T) {
+	t.Helper()
 
-// Verifies batch aggregation behavior when domains have mixed outcomes.
-// Successful domains are collected in Succeeded, while runner errors are
-// recorded in Failed keyed by normalized domain name.
-func TestRunBatchCollectsMixedResults(t *testing.T) {
-	summary := runBatch([]string{"good.example", "bad.example"}, "output", func(domain string, outputDir string) error {
-		if domain == "bad.example" {
-			return errors.New("lookup failed")
-		}
-		return nil
+	originalScanner := testHookScanner
+	originalWriter := testHookReportWriter
+	originalLoggerFactory := testHookLoggerFactory
+
+	t.Cleanup(func() {
+		testHookScanner = originalScanner
+		testHookReportWriter = originalWriter
+		testHookLoggerFactory = originalLoggerFactory
 	})
-
-	if len(summary.Succeeded) != 1 || summary.Succeeded[0] != "good.example" {
-		t.Fatalf("unexpected successes: %#v", summary.Succeeded)
-	}
-	if len(summary.Failed) != 1 {
-		t.Fatalf("unexpected failures: %#v", summary.Failed)
-	}
-	if err := summary.Failed["bad.example"]; err == nil || err.Error() != "lookup failed" {
-		t.Fatalf("unexpected batch failure for bad.example: %v", err)
-	}
-}
-
-// Verifies that runBatch trims/normalizes input domains and skips blank entries.
-// The runner should be invoked only for non-empty domains, and the summary total
-// should match the number of processed domains.
-func TestRunBatchSkipsBlankDomains(t *testing.T) {
-	called := 0
-	summary := runBatch([]string{" github.com ", "", "   ", "cloudflare.com"}, "output", func(domain string, outputDir string) error {
-		called++
-		return nil
-	})
-
-	if called != 2 {
-		t.Fatalf("expected 2 runner calls, got %d", called)
-	}
-	if summary.Total() != 2 {
-		t.Fatalf("expected total 2, got %d", summary.Total())
-	}
 }
 
 func TestValidateOutputFormatAcceptsSupportedValues(t *testing.T) {
@@ -101,5 +55,106 @@ func TestValidateOutputFormatAcceptsSupportedValues(t *testing.T) {
 func TestValidateOutputFormatRejectsInvalidValues(t *testing.T) {
 	if _, err := ValidateOutputFormat("xml"); err == nil {
 		t.Fatal("expected error for unsupported output format")
+	}
+}
+
+func TestRunDiscoveryCollectsOrderedResults(t *testing.T) {
+	withRunDiscoveryHooks(t)
+
+	testHookLoggerFactory = func(logLocation string, verbose bool) (runLoggerSink, error) {
+		return noopLogger{}, nil
+	}
+	testHookScanner = func(domain string) (*discovery.DiscoveryResult, error) {
+		if domain == "bad.example" {
+			return nil, errors.New("lookup failed")
+		}
+		return &discovery.DiscoveryResult{Domain: domain}, nil
+	}
+	testHookReportWriter = func(baseDir string, res *discovery.DiscoveryResult, output OutputFormat) (string, error) {
+		return filepath.Join(baseDir, res.Domain, "report.md"), nil
+	}
+
+	summary, err := RunDiscovery(
+		[]string{"good.example", "bad.example", "great.example"},
+		RunOptions{OutputDir: "output", Output: OutputMarkdown, LogLocation: "/tmp/dns-discovery.log"},
+	)
+	if err != nil {
+		t.Fatalf("run discovery: %v", err)
+	}
+
+	if len(summary.Succeeded) != 2 {
+		t.Fatalf("expected 2 successes, got %d", len(summary.Succeeded))
+	}
+	if summary.Succeeded[0].Domain != "good.example" || summary.Succeeded[1].Domain != "great.example" {
+		t.Fatalf("success order mismatch: %#v", summary.Succeeded)
+	}
+	if len(summary.Failed) != 1 {
+		t.Fatalf("expected 1 failure, got %d", len(summary.Failed))
+	}
+	if summary.Failed[0].Domain != "bad.example" || summary.Failed[0].Err == nil || summary.Failed[0].Err.Error() != "lookup failed" {
+		t.Fatalf("unexpected failure entry: %#v", summary.Failed[0])
+	}
+}
+
+func TestRunDiscoverySkipsBlankDomains(t *testing.T) {
+	withRunDiscoveryHooks(t)
+
+	calls := 0
+	testHookLoggerFactory = func(logLocation string, verbose bool) (runLoggerSink, error) {
+		return noopLogger{}, nil
+	}
+	testHookScanner = func(domain string) (*discovery.DiscoveryResult, error) {
+		calls++
+		return &discovery.DiscoveryResult{Domain: domain}, nil
+	}
+	testHookReportWriter = func(baseDir string, res *discovery.DiscoveryResult, output OutputFormat) (string, error) {
+		return filepath.Join(baseDir, res.Domain, "report.md"), nil
+	}
+
+	summary, err := RunDiscovery(
+		[]string{" github.com ", "", "   ", "cloudflare.com"},
+		RunOptions{OutputDir: "output", Output: OutputMarkdown, LogLocation: "/tmp/dns-discovery.log"},
+	)
+	if err != nil {
+		t.Fatalf("run discovery: %v", err)
+	}
+
+	if calls != 2 {
+		t.Fatalf("expected 2 scanner calls, got %d", calls)
+	}
+	if summary.Total() != 2 {
+		t.Fatalf("expected total 2, got %d", summary.Total())
+	}
+}
+
+func TestRunDiscoveryCapturesWriterErrorsAsFailures(t *testing.T) {
+	withRunDiscoveryHooks(t)
+
+	testHookLoggerFactory = func(logLocation string, verbose bool) (runLoggerSink, error) {
+		return noopLogger{}, nil
+	}
+	testHookScanner = func(domain string) (*discovery.DiscoveryResult, error) {
+		return &discovery.DiscoveryResult{Domain: domain}, nil
+	}
+	testHookReportWriter = func(baseDir string, res *discovery.DiscoveryResult, output OutputFormat) (string, error) {
+		if res.Domain == "bad.example" {
+			return "", errors.New("write failed")
+		}
+		return filepath.Join(baseDir, res.Domain, "report.md"), nil
+	}
+
+	summary, err := RunDiscovery(
+		[]string{"good.example", "bad.example"},
+		RunOptions{OutputDir: "output", Output: OutputMarkdown, LogLocation: "/tmp/dns-discovery.log"},
+	)
+	if err != nil {
+		t.Fatalf("run discovery: %v", err)
+	}
+
+	if len(summary.Succeeded) != 1 || summary.Succeeded[0].Domain != "good.example" {
+		t.Fatalf("unexpected successes: %#v", summary.Succeeded)
+	}
+	if len(summary.Failed) != 1 || summary.Failed[0].Domain != "bad.example" {
+		t.Fatalf("unexpected failures: %#v", summary.Failed)
 	}
 }

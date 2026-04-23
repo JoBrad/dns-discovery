@@ -2,7 +2,9 @@ package app
 
 import (
 	"fmt"
-	"sort"
+	"log"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/jbradley/dns-discovery/internal/discovery"
@@ -17,11 +19,35 @@ const (
 	OutputText     OutputFormat = "text"
 )
 
+const (
+	defaultOutputDir   = "output"
+	defaultLogLocation = "logs/dns-discovery.log"
+)
+
 type RunOptions struct {
 	OutputDir   string
 	Output      OutputFormat
 	Verbose     bool
 	LogLocation string
+}
+
+type DomainSuccess struct {
+	Domain     string
+	ReportPath string
+}
+
+type DomainFailure struct {
+	Domain string
+	Err    error
+}
+
+type BatchSummary struct {
+	Succeeded []DomainSuccess
+	Failed    []DomainFailure
+}
+
+func (summary BatchSummary) Total() int {
+	return len(summary.Succeeded) + len(summary.Failed)
 }
 
 func ValidateOutputFormat(value string) (OutputFormat, error) {
@@ -34,278 +60,187 @@ func ValidateOutputFormat(value string) (OutputFormat, error) {
 	}
 }
 
-type BatchSummary struct {
-	Succeeded []string
-	Failed    map[string]error
+type runLoggerSink interface {
+	Infof(format string, args ...any)
+	Errorf(format string, args ...any)
+	Close() error
 }
 
-var testHookDomainRunner = executeDomain
-
-func RunDomain(domain string, outputDir string) error {
-	return testHookDomainRunner(domain, outputDir)
+type runLogger struct {
+	file       *os.File
+	fileLogger *log.Logger
+	verbose    bool
 }
 
-func RunBatch(domains []string, outputDir string) BatchSummary {
-	return runBatch(domains, outputDir, RunDomain)
+var testHookScanner = scanDomain
+var testHookReportWriter = func(baseDir string, res *discovery.DiscoveryResult, output OutputFormat) (string, error) {
+	return report.SaveReportByFormat(baseDir, res, string(output))
+}
+var testHookLoggerFactory = func(logLocation string, verbose bool) (runLoggerSink, error) {
+	return newRunLogger(logLocation, verbose)
 }
 
-func (summary BatchSummary) Total() int {
-	return len(summary.Succeeded) + len(summary.Failed)
-}
-
-func (summary BatchSummary) FailedDomains() []string {
-	domains := make([]string, 0, len(summary.Failed))
-	for domain := range summary.Failed {
-		domains = append(domains, domain)
+func RunDiscovery(domains []string, opts RunOptions) (BatchSummary, error) {
+	output, err := resolveOutputFormat(opts.Output)
+	if err != nil {
+		return BatchSummary{}, err
 	}
-	sort.Strings(domains)
-	return domains
-}
 
-func runBatch(domains []string, outputDir string, runner func(string, string) error) BatchSummary {
-	summary := BatchSummary{Failed: make(map[string]error)}
+	outputDir := strings.TrimSpace(opts.OutputDir)
+	if outputDir == "" {
+		outputDir = defaultOutputDir
+	}
 
+	logPath, err := resolveLogPath(opts.LogLocation)
+	if err != nil {
+		return BatchSummary{}, err
+	}
+
+	logger, err := testHookLoggerFactory(logPath, opts.Verbose)
+	if err != nil {
+		return BatchSummary{}, err
+	}
+	defer logger.Close()
+
+	summary := BatchSummary{}
 	for _, domain := range domains {
-		normalized := strings.TrimSpace(strings.ToLower(domain))
+		normalized := strings.ToLower(strings.TrimSpace(domain))
 		if normalized == "" {
 			continue
 		}
 
-		if err := runner(normalized, outputDir); err != nil {
-			summary.Failed[normalized] = err
+		logger.Infof("starting discovery for %s", normalized)
+		result, err := testHookScanner(normalized)
+		if err != nil {
+			logger.Errorf("discovery failed for %s: %v", normalized, err)
+			summary.Failed = append(summary.Failed, DomainFailure{Domain: normalized, Err: err})
 			continue
 		}
 
-		summary.Succeeded = append(summary.Succeeded, normalized)
+		reportPath, err := testHookReportWriter(outputDir, result, output)
+		if err != nil {
+			logger.Errorf("report generation failed for %s: %v", normalized, err)
+			summary.Failed = append(summary.Failed, DomainFailure{Domain: normalized, Err: err})
+			continue
+		}
+
+		logger.Infof("completed discovery for %s; report=%s", normalized, reportPath)
+		summary.Succeeded = append(summary.Succeeded, DomainSuccess{Domain: normalized, ReportPath: reportPath})
 	}
 
-	return summary
+	return summary, nil
 }
 
-func executeDomain(domain string, outputDir string) error {
-	sep := strings.Repeat("=", 60)
-
-	fmt.Printf("\n%s\n", sep)
-	fmt.Printf("  DNS Zone Discovery: %s\n", domain)
-	fmt.Printf("%s\n\n", sep)
-
-	// DNS enumeration
-	fmt.Println("Querying DNS records...")
+func scanDomain(domain string) (*discovery.DiscoveryResult, error) {
 	records, err := discovery.QueryAllRecords(domain)
 	if err != nil {
-		return fmt.Errorf("  ERROR: %w", err)
+		return nil, err
 	}
 
 	services := discovery.DetectServices(records)
-
-	// Provider fingerprinting
 	nsHosts := records["NS"]
 	providerResult := discovery.IdentifyProviders(domain, nsHosts)
 
-	// TLS check (A record targets)
 	var tlsResults []discovery.TLSResult
-	for _, aRecord := range records["A"] {
+	for range records["A"] {
 		tlsResults = append(tlsResults, discovery.CheckTLS(domain))
-		_ = aRecord
-		break // One TLS check per domain (use the domain name, not raw IP)
+		break
 	}
 
-	// Email health
 	emailResult := discovery.EvaluateEmailHealth(domain)
 
-	finalResult := &discovery.DiscoveryResult{
+	return &discovery.DiscoveryResult{
 		Domain:   domain,
 		DNS:      records,
 		Services: services,
 		Provider: providerResult,
 		TLS:      tlsResults,
 		Email:    emailResult,
+	}, nil
+}
+
+func resolveOutputFormat(output OutputFormat) (OutputFormat, error) {
+	normalized := strings.TrimSpace(string(output))
+	if normalized == "" {
+		normalized = string(OutputMarkdown)
+	}
+	return ValidateOutputFormat(normalized)
+}
+
+func resolveLogPath(logLocation string) (string, error) {
+	location := strings.TrimSpace(logLocation)
+	if location == "" {
+		location = defaultLogLocation
 	}
 
-	// Report
-	fmt.Printf("\n%s\n  Nameserver Providers\n%s\n", sep, sep)
-	fmt.Printf("  Primary provider: %s\n", providerResult.Primary)
-	if providerResult.IsSplit {
-		fmt.Println("  ⚠  Split DNS detected:")
-		for provider, count := range providerResult.Counts {
-			fmt.Printf("     • %s (%d NS records)\n", provider, count)
-		}
-	}
-	if len(nsHosts) > 0 {
-		fmt.Println("\n  Nameservers:")
-		for _, ns := range nsHosts {
-			fmt.Printf("     %s\n", ns)
-		}
+	if filepath.IsAbs(location) {
+		return location, nil
 	}
 
-	fmt.Printf("\n%s\n  DNS Records\n%s\n", sep, sep)
-	recordOrder := []string{"A", "AAAA", "MX", "NS", "TXT", "CNAME", "SOA", "CAA", "SRV"}
-	for _, rtype := range recordOrder {
-		recs := records[rtype]
-		if len(recs) == 0 {
-			fmt.Printf("  %-6s  — not configured\n", rtype)
-			continue
-		}
-		fmt.Printf("  %-6s  (%d record(s)):\n", rtype, len(recs))
-		for _, r := range recs {
-			fmt.Printf("           %s\n", r)
-		}
-	}
-
-	fmt.Printf("\n%s\n  Detected Services\n%s\n", sep, sep)
-	anyServices := false
-	if len(services.Email) > 0 {
-		fmt.Println("  Email Providers:")
-		for _, s := range services.Email {
-			fmt.Printf("     • %s\n", s)
-		}
-		anyServices = true
-	}
-	if len(services.HostingCDN) > 0 {
-		fmt.Println("  Hosting / CDN:")
-		for _, s := range services.HostingCDN {
-			fmt.Printf("     • %s\n", s)
-		}
-		anyServices = true
-	}
-	if len(services.VerificationServices) > 0 {
-		fmt.Println("  Verification / SaaS:")
-		for _, s := range services.VerificationServices {
-			fmt.Printf("     • %s\n", s)
-		}
-		anyServices = true
-	}
-	if !anyServices {
-		fmt.Println("  None detected")
-	}
-
-	fmt.Printf("\n%s\n  Email DNS Health\n%s\n", sep, sep)
-	if len(emailResult.MXRecords) > 0 {
-		fmt.Printf("  MX Records (%d):\n", len(emailResult.MXRecords))
-		for _, mx := range emailResult.MXRecords {
-			fmt.Printf("     %s\n", mx)
-		}
-	} else {
-		fmt.Println("  MX: ✗ No MX records found")
-	}
-	printSPF(emailResult.SPF)
-	printDMARC(emailResult.DMARC)
-	printDKIM(emailResult.DKIM)
-
-	scoreIcon := "✗"
-	if emailResult.Score == 4 {
-		scoreIcon = "✓"
-	}
-	fmt.Printf("\n  Email Health Score: %s %s\n", emailResult.ScoreText, scoreIcon)
-
-	fmt.Printf("\n%s\n  TLS Health\n%s\n", sep, sep)
-	if len(tlsResults) == 0 {
-		fmt.Println("  ✗ No A records found to check TLS")
-	} else {
-		for _, tr := range tlsResults {
-			status := "✓"
-			if !tr.CertValid || tr.CertExpired || tr.ExpiryWarning {
-				status = "⚠"
-			}
-			if !tr.Reachable {
-				status = "✗"
-			}
-			fmt.Printf("  %s %-20s (expires: %s, issuer: %s)\n", status, tr.Hostname, tr.CertExpiry, tr.Issuer)
-			if tr.ErrorDetail != "" {
-				fmt.Printf("      Error: %s (%s)\n", tr.ErrorCategory, tr.ErrorDetail)
-			}
-		}
-	}
-
-	fmt.Printf("\n%s\n  Executive Summary\n%s\n", sep, sep)
-	fmt.Printf("  Domain:    %s\n", domain)
-	fmt.Printf("  DNS:       %d record type(s) configured\n", len(records))
-	fmt.Printf("  Provider:  %s", providerResult.Primary)
-	if providerResult.IsSplit {
-		fmt.Printf(" (split DNS — %d providers)", len(providerResult.Counts))
-	}
-	fmt.Println()
-	if len(tlsResults) > 0 {
-		t := tlsResults[0]
-		if t.CertValid {
-			fmt.Printf("  TLS:       ✓ Valid (%s, %dd until expiry)\n", t.TLSVersion, t.DaysToExpiry)
-		} else {
-			fmt.Printf("  TLS:       ✗ %s\n", t.ErrorCategory)
-		}
-	}
-	fmt.Printf("  Email:     %s", emailResult.ScoreText)
-	if emailResult.Score < 4 {
-		missing := []string{}
-		if len(emailResult.MXRecords) == 0 {
-			missing = append(missing, "MX")
-		}
-		if !emailResult.SPF.Present {
-			missing = append(missing, "SPF")
-		}
-		if !emailResult.DMARC.Present {
-			missing = append(missing, "DMARC")
-		}
-		if len(emailResult.DKIM) == 0 {
-			missing = append(missing, "DKIM")
-		}
-		fmt.Printf(" — missing: %s", strings.Join(missing, ", "))
-	}
-	fmt.Println()
-
-	reportPath, err := report.SaveReport(outputDir, finalResult)
+	cwd, err := os.Getwd()
 	if err != nil {
-		fmt.Printf("\n  ⚠  Failed to save report: %v\n", err)
-	} else {
-		fmt.Printf("\n  ✓ Report saved to: %s\n", reportPath)
+		return "", fmt.Errorf("resolve working directory: %w", err)
 	}
 
-	fmt.Printf("\n%s\n\n", sep)
-	return nil
+	repoRoot, err := findRepoRoot(cwd)
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(repoRoot, location), nil
 }
 
-func printSPF(spf discovery.SPFResult) {
-	if !spf.Present {
-		fmt.Println("  SPF:  ✗ No SPF record found")
-		return
-	}
-	icon := "✓"
-	if spf.Insecure || len(spf.Issues) > 0 {
-		icon = "⚠"
-	}
-	fmt.Printf("  SPF:  %s %s (%s)\n", icon, spf.Record, spf.Policy)
-	for _, issue := range spf.Issues {
-		fmt.Printf("          ⚠  %s\n", issue)
-	}
-}
-
-func printDMARC(dmarc discovery.DMARCResult) {
-	if !dmarc.Present {
-		fmt.Println("  DMARC: ✗ No DMARC record found")
-		return
-	}
-	icon := "✓"
-	if dmarc.Policy == "none" {
-		icon = "⚠"
-	}
-	rua := ""
-	if !dmarc.HasAggReports {
-		rua = " (no rua= reporting)"
-	}
-	fmt.Printf("  DMARC: %s p=%s%s\n", icon, dmarc.Policy, rua)
-}
-
-func printDKIM(selectors []discovery.DKIMSelector) {
-	if len(selectors) == 0 {
-		fmt.Println("  DKIM:  ✗ No DKIM selectors found (probed 27 common selectors)")
-		return
-	}
-	names := make([]string, 0, len(selectors))
-	for _, s := range selectors {
-		name := s.Selector
-		if s.Revoked {
-			name += "(revoked)"
+func findRepoRoot(startDir string) (string, error) {
+	current := startDir
+	for {
+		candidate := filepath.Join(current, "go.mod")
+		if _, err := os.Stat(candidate); err == nil {
+			return current, nil
+		} else if !os.IsNotExist(err) {
+			return "", fmt.Errorf("check %q: %w", candidate, err)
 		}
-		names = append(names, name)
+
+		parent := filepath.Dir(current)
+		if parent == current {
+			break
+		}
+		current = parent
 	}
-	fmt.Printf("  DKIM:  ✓ %d selector(s) found: %s\n", len(selectors), strings.Join(names, ", "))
+
+	return "", fmt.Errorf("could not find repository root containing go.mod from %q", startDir)
+}
+
+func newRunLogger(logLocation string, verbose bool) (runLoggerSink, error) {
+	if err := os.MkdirAll(filepath.Dir(logLocation), 0755); err != nil {
+		return nil, fmt.Errorf("create log directory: %w", err)
+	}
+
+	file, err := os.OpenFile(logLocation, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("open log file %q: %w", logLocation, err)
+	}
+
+	return &runLogger{
+		file:       file,
+		fileLogger: log.New(file, "", log.LstdFlags),
+		verbose:    verbose,
+	}, nil
+}
+
+func (l *runLogger) Infof(format string, args ...any) {
+	message := fmt.Sprintf("INFO  "+format, args...)
+	l.fileLogger.Println(message)
+	if l.verbose {
+		fmt.Println(message)
+	}
+}
+
+func (l *runLogger) Errorf(format string, args ...any) {
+	message := fmt.Sprintf("ERROR "+format, args...)
+	l.fileLogger.Println(message)
+	fmt.Fprintln(os.Stderr, message)
+}
+
+func (l *runLogger) Close() error {
+	return l.file.Close()
 }

@@ -2,8 +2,6 @@ package report
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -200,16 +198,5 @@ func sortedKeys(m map[string]int) []string {
 
 // SaveReport writes the Markdown report to the output directory.
 func SaveReport(baseDir string, res *discovery.DiscoveryResult) (string, error) {
-	domainDir := filepath.Join(baseDir, res.Domain)
-	if err := os.MkdirAll(domainDir, 0755); err != nil {
-		return "", err
-	}
-
-	content := GenerateMarkdown(res)
-	reportPath := filepath.Join(domainDir, "report.md")
-	if err := os.WriteFile(reportPath, []byte(content), 0644); err != nil {
-		return "", err
-	}
-
-	return reportPath, nil
+	return SaveReportByFormat(baseDir, res, FormatMarkdown)
 }

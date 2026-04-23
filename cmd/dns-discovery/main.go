@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"regexp"
-	"sort"
 	"strings"
 
 	"github.com/jbradley/dns-discovery/internal/app"
@@ -46,22 +45,32 @@ and email DNS health for any domain.`,
 			cmd.Flags().Changed("log-location"),
 			cfg,
 		)
-		if _, err := app.ValidateOutputFormat(resolved.Output); err != nil {
+		resolvedOutput, err := app.ValidateOutputFormat(resolved.Output)
+		if err != nil {
 			return err
 		}
 		domains, err := resolveDomains(args, inputFile, cfg)
 		if err != nil {
 			return err
 		}
-		_ = resolved.LogLocation
-		_ = verbose
 
-		if len(domains) == 1 {
-			return app.RunDomain(domains[0], resolved.OutputDir)
+		summary, err := app.RunDiscovery(domains, app.RunOptions{
+			OutputDir:   resolved.OutputDir,
+			Output:      resolvedOutput,
+			Verbose:     verbose,
+			LogLocation: resolved.LogLocation,
+		})
+		if err != nil {
+			return err
 		}
 
-		summary := app.RunBatch(domains, resolved.OutputDir)
-		printBatchSummary(summary)
+		for _, success := range summary.Succeeded {
+			fmt.Printf("✓ %s -> %s\n", success.Domain, success.ReportPath)
+		}
+		for _, failure := range summary.Failed {
+			fmt.Fprintf(os.Stderr, "✗ %s: %v\n", failure.Domain, failure.Err)
+		}
+
 		if len(summary.Failed) > 0 {
 			return fmt.Errorf("batch completed with %d failed domain(s)", len(summary.Failed))
 		}
@@ -157,31 +166,4 @@ func loadDomainsFromFile(path string) ([]string, error) {
 	}
 
 	return domains, nil
-}
-
-func printBatchSummary(summary app.BatchSummary) {
-	sep := strings.Repeat("=", 60)
-	fmt.Printf("\n%s\n  Batch Summary\n%s\n", sep, sep)
-	fmt.Printf("  Total:      %d\n", summary.Total())
-	fmt.Printf("  Succeeded:  %d\n", len(summary.Succeeded))
-	fmt.Printf("  Failed:     %d\n", len(summary.Failed))
-
-	if len(summary.Failed) > 0 {
-		fmt.Println("\n  Failed Domains:")
-		failedDomains := summary.FailedDomains()
-		for _, domain := range failedDomains {
-			fmt.Printf("     • %s: %v\n", domain, summary.Failed[domain])
-		}
-	}
-
-	if len(summary.Succeeded) > 0 {
-		succeeded := append([]string(nil), summary.Succeeded...)
-		sort.Strings(succeeded)
-		fmt.Println("\n  Succeeded Domains:")
-		for _, domain := range succeeded {
-			fmt.Printf("     • %s\n", domain)
-		}
-	}
-
-	fmt.Printf("\n%s\n", sep)
 }
