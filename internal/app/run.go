@@ -9,6 +9,31 @@ import (
 	"github.com/jbradley/dns-discovery/internal/report"
 )
 
+type OutputFormat string
+
+const (
+	OutputMarkdown OutputFormat = "markdown"
+	OutputJSON     OutputFormat = "json"
+	OutputText     OutputFormat = "text"
+)
+
+type RunOptions struct {
+	OutputDir   string
+	Output      OutputFormat
+	Verbose     bool
+	LogLocation string
+}
+
+func ValidateOutputFormat(value string) (OutputFormat, error) {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	switch OutputFormat(normalized) {
+	case OutputMarkdown, OutputJSON, OutputText:
+		return OutputFormat(normalized), nil
+	default:
+		return "", fmt.Errorf("invalid output format %q: expected one of markdown, json, text", value)
+	}
+}
+
 type BatchSummary struct {
 	Succeeded []string
 	Failed    map[string]error

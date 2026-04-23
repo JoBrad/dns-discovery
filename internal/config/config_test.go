@@ -27,7 +27,7 @@ func TestLoadMissingPathIncludesFileName(t *testing.T) {
 // normalization behavior expected by runtime config resolution.
 func TestLoadValidJSONDecodesAndNormalizes(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
-	content := `{"output_dir":" reports ","domains":[" github.com ","cloudflare.com"]}`
+	content := `{"output_dir":" reports ","output":" JSON ","log_location":" logs/custom.log ","domains":[" github.com ","cloudflare.com"]}`
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -38,6 +38,12 @@ func TestLoadValidJSONDecodesAndNormalizes(t *testing.T) {
 	}
 	if cfg.OutputDir != "reports" {
 		t.Fatalf("expected trimmed output dir, got %q", cfg.OutputDir)
+	}
+	if cfg.Output != "json" {
+		t.Fatalf("expected normalized output value, got %q", cfg.Output)
+	}
+	if cfg.LogLocation != "logs/custom.log" {
+		t.Fatalf("expected normalized log location, got %q", cfg.LogLocation)
 	}
 	if len(cfg.Domains) != 2 || cfg.Domains[0] != "github.com" || cfg.Domains[1] != "cloudflare.com" {
 		t.Fatalf("unexpected domains: %#v", cfg.Domains)
@@ -133,15 +139,27 @@ func TestLoadTxtConfigReturnsParseError(t *testing.T) {
 // flag value must override config, while an unchanged flag should preserve the
 // config value.
 func TestResolvePrefersFlagOverConfig(t *testing.T) {
-	cfg := Config{OutputDir: "from-config"}
+	cfg := Config{OutputDir: "from-config", Output: "json", LogLocation: "logs/from-config.log"}
 
-	resolved := Resolve("from-flag", true, cfg)
+	resolved := Resolve("from-flag", true, "text", true, "logs/from-flag.log", true, cfg)
 	if resolved.OutputDir != "from-flag" {
 		t.Fatalf("expected flag output dir, got %q", resolved.OutputDir)
 	}
+	if resolved.Output != "text" {
+		t.Fatalf("expected flag output format, got %q", resolved.Output)
+	}
+	if resolved.LogLocation != "logs/from-flag.log" {
+		t.Fatalf("expected flag log location, got %q", resolved.LogLocation)
+	}
 
-	resolved = Resolve(DefaultOutputDir, false, cfg)
+	resolved = Resolve(DefaultOutputDir, false, DefaultOutput, false, DefaultLogLocation, false, cfg)
 	if resolved.OutputDir != "from-config" {
 		t.Fatalf("expected config output dir when flag is unchanged, got %q", resolved.OutputDir)
+	}
+	if resolved.Output != "json" {
+		t.Fatalf("expected config output when output flag is unchanged, got %q", resolved.Output)
+	}
+	if resolved.LogLocation != "logs/from-config.log" {
+		t.Fatalf("expected config log location when log flag is unchanged, got %q", resolved.LogLocation)
 	}
 }

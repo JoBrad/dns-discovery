@@ -73,3 +73,33 @@ func TestRunBatchSkipsBlankDomains(t *testing.T) {
 		t.Fatalf("expected total 2, got %d", summary.Total())
 	}
 }
+
+func TestValidateOutputFormatAcceptsSupportedValues(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  OutputFormat
+	}{
+		{name: "markdown", input: "markdown", want: OutputMarkdown},
+		{name: "json", input: " JSON ", want: OutputJSON},
+		{name: "text", input: "text", want: OutputText},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := ValidateOutputFormat(tc.input)
+			if err != nil {
+				t.Fatalf("validate output format: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("expected %q, got %q", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestValidateOutputFormatRejectsInvalidValues(t *testing.T) {
+	if _, err := ValidateOutputFormat("xml"); err == nil {
+		t.Fatal("expected error for unsupported output format")
+	}
+}

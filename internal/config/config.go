@@ -9,10 +9,14 @@ import (
 )
 
 const DefaultOutputDir = "output"
+const DefaultOutput = "markdown"
+const DefaultLogLocation = "logs/dns-discovery.log"
 
 type Config struct {
-	OutputDir string   `json:"output_dir"`
-	Domains   []string `json:"domains"`
+	OutputDir   string   `json:"output_dir"`
+	Output      string   `json:"output"`
+	LogLocation string   `json:"log_location"`
+	Domains     []string `json:"domains"`
 }
 
 func Load(path string) (Config, error) {
@@ -46,10 +50,16 @@ func Load(path string) (Config, error) {
 	return cfg, nil
 }
 
-func Resolve(flagOutputDir string, outputDirFlagSet bool, cfg Config) Config {
+func Resolve(flagOutputDir string, outputDirFlagSet bool, flagOutput string, outputFlagSet bool, flagLogLocation string, logLocationFlagSet bool, cfg Config) Config {
 	resolved := cfg
 	if resolved.OutputDir == "" {
 		resolved.OutputDir = DefaultOutputDir
+	}
+	if resolved.Output == "" {
+		resolved.Output = DefaultOutput
+	}
+	if resolved.LogLocation == "" {
+		resolved.LogLocation = DefaultLogLocation
 	}
 
 	if outputDirFlagSet {
@@ -59,12 +69,34 @@ func Resolve(flagOutputDir string, outputDirFlagSet bool, cfg Config) Config {
 		}
 	}
 
+	if outputFlagSet {
+		resolved.Output = strings.ToLower(strings.TrimSpace(flagOutput))
+		if resolved.Output == "" {
+			resolved.Output = DefaultOutput
+		}
+	}
+
+	if logLocationFlagSet {
+		resolved.LogLocation = strings.TrimSpace(flagLogLocation)
+		if resolved.LogLocation == "" {
+			resolved.LogLocation = DefaultLogLocation
+		}
+	}
+
 	return resolved
 }
 
 func (cfg *Config) normalize() error {
 	if cfg.OutputDir = strings.TrimSpace(cfg.OutputDir); cfg.OutputDir == "" {
 		cfg.OutputDir = DefaultOutputDir
+	}
+
+	if cfg.Output = strings.ToLower(strings.TrimSpace(cfg.Output)); cfg.Output == "" {
+		cfg.Output = DefaultOutput
+	}
+
+	if cfg.LogLocation = strings.TrimSpace(cfg.LogLocation); cfg.LogLocation == "" {
+		cfg.LogLocation = DefaultLogLocation
 	}
 
 	if len(cfg.Domains) == 0 {

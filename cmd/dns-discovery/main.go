@@ -14,6 +14,9 @@ import (
 )
 
 var outputDir string
+var output string
+var logLocation string
+var verbose bool
 var configPath string
 var inputFile string
 
@@ -34,11 +37,24 @@ and email DNS health for any domain.`,
 			return err
 		}
 
-		resolved := appconfig.Resolve(outputDir, cmd.Flags().Changed("output-dir"), cfg)
+		resolved := appconfig.Resolve(
+			outputDir,
+			cmd.Flags().Changed("output-dir"),
+			output,
+			cmd.Flags().Changed("output"),
+			logLocation,
+			cmd.Flags().Changed("log-location"),
+			cfg,
+		)
+		if _, err := app.ValidateOutputFormat(resolved.Output); err != nil {
+			return err
+		}
 		domains, err := resolveDomains(args, inputFile, cfg)
 		if err != nil {
 			return err
 		}
+		_ = resolved.LogLocation
+		_ = verbose
 
 		if len(domains) == 1 {
 			return app.RunDomain(domains[0], resolved.OutputDir)
@@ -56,6 +72,9 @@ and email DNS health for any domain.`,
 
 func init() {
 	rootCmd.Flags().StringVarP(&outputDir, "output-dir", "o", appconfig.DefaultOutputDir, "Directory to save reports")
+	rootCmd.Flags().StringVar(&output, "output", appconfig.DefaultOutput, "Output format: markdown, json, text")
+	rootCmd.Flags().StringVar(&logLocation, "log-location", appconfig.DefaultLogLocation, "Path to log file")
+	rootCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose logging to stdout")
 	rootCmd.Flags().StringVar(&configPath, "config", "", "Path to JSON config file")
 	rootCmd.Flags().StringVar(&inputFile, "input-file", "", "Path to newline-delimited domains file")
 }
