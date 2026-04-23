@@ -2,4 +2,5 @@
 .github/skills/*
 !.github/skills/spike-*/**
 
+logs/
 output/

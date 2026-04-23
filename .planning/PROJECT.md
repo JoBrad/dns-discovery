@@ -8,6 +8,25 @@
 
 Build a DNS zone discovery tool that, given a domain name, produces an executive summary of the zone's configuration. Output includes registrar and nameserver identification (with friendly provider names), a list of configured services/hosts/redirects, and health checks for each service — validating email DNS (MX/SPF/DKIM/DMARC), TLS certificate validity, and minimum TLS 1.2+ for web-facing targets.
 
+## What This Is
+
+This project is a CLI-first Go application that performs DNS discovery and produces actionable reports per domain. It is designed for practical operations use: fast domain checks, repeatable outputs, and clear health signals for DNS, email, and TLS posture.
+
+## Core Value
+
+- Turn raw DNS data into operator-friendly summaries
+- Detect provider posture (including split DNS) quickly
+- Surface email and TLS risks in one execution flow
+- Generate saved artifacts for auditability and follow-up
+
+## Requirements
+
+- Accept a domain argument and support batch execution from config/input files
+- Discover key DNS record types and infer associated services/providers
+- Evaluate email DNS health (MX, SPF, DMARC, DKIM) and TLS certificate health
+- Produce report output in supported formats under the configured output directory
+- Provide reliable error handling so one domain failure does not abort whole batch runs
+
 ## Core Deliverable
 
 A CLI-first Go tool (`dns-discovery <domain>`) that outputs a Markdown report to the `output/` directory with:
