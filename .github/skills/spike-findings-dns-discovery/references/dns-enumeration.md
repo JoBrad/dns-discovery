@@ -11,86 +11,88 @@ Query all DNS record types for a domain and detect configured services from reco
 
 ## How to Build It
 
-**Install:** Add `dnspython` to dependencies (already in pyproject.toml for this project).
+Use `github.com/miekg/dns` and keep one canonical record list and resolver path.
 
-**Pattern:**
-```python
-import dns.resolver
-import dns.exception
+1. Define record types once and iterate in fixed order.
+2. Query each type with recursive DNS (`RecursionDesired=true`) against the configured resolver.
+3. Retry truncated UDP responses over TCP.
+4. Convert resource records to clean, human-readable strings by record type.
+5. Treat NXDOMAIN on `A` query as terminal domain-not-found; treat missing answers as not configured.
+6. Run service detection after enumeration using MX/TXT/CNAME lookup maps.
 
-RECORD_TYPES = ["A", "AAAA", "MX", "NS", "TXT", "CNAME", "SOA", "CAA", "SRV"]
-
-def query_records(domain, record_type):
-    try:
-        answers = dns.resolver.resolve(domain, record_type)
-        return [str(r) for r in answers]
-    except dns.resolver.NXDOMAIN:
-        return None  # domain doesn't exist — terminal
-    except (dns.resolver.NoAnswer, dns.resolver.NoNameservers):
-        return []  # record type not configured
-    except dns.exception.Timeout:
-        return []  # timeout
-
-# Query all types
-for rtype in RECORD_TYPES:
-    result = query_records(domain, rtype)
-    if result is None:
-        print(f"ERROR: Domain does not exist")
-        sys.exit(1)
-    elif result:
-        print(f"{rtype}: {len(result)} records")
-        for r in result:
-            print(f"  {r}")
-```
-
-**Service Detection Pattern:**
-```python
-SERVICE_PATTERNS = {
-    "mx": {
-        "google.com": "Google Workspace",
-        "protection.outlook.com": "Microsoft 365",
-        # ... more patterns
-    },
-    "txt": {
-        "v=spf1": "SPF Record",
-        "google-site-verification": "Google Search Console",
-        # ... more patterns
-    },
-    "cname": {
-        "cloudflare.com": "Cloudflare",
-        "github.io": "GitHub Pages",
-        # ... more patterns
-    },
+```go
+var recordTypes = []struct {
+    name  string
+    qtype uint16
+}{
+    {"A", dns.TypeA}, {"AAAA", dns.TypeAAAA}, {"MX", dns.TypeMX},
+    {"NS", dns.TypeNS}, {"TXT", dns.TypeTXT}, {"CNAME", dns.TypeCNAME},
+    {"SOA", dns.TypeSOA}, {"CAA", dns.TypeCAA}, {"SRV", dns.TypeSRV},
 }
 
-def detect_services(records):
-    detected = {}
-    for mx in records.get("MX", []):
-        for pattern, service in SERVICE_PATTERNS["mx"].items():
-            if pattern in mx.lower():
-                detected.setdefault("email", set()).add(service)
-    # ... similar for TXT and CNAME
-    return detected
+func QueryAllRecords(domain string) (DNSRecords, error) {
+    records := make(DNSRecords)
+
+    for _, rt := range recordTypes {
+        answers, rcode, _ := queryRaw(domain, rt.qtype)
+        if rcode == dns.RcodeNameError && rt.qtype == dns.TypeA {
+            return nil, ErrNXDOMAIN
+        }
+        for _, ans := range answers {
+            records[rt.name] = append(records[rt.name], rrToString(ans))
+        }
+    }
+    return records, nil
+}
+```
+
+```go
+func DetectServices(records DNSRecords) DetectedServices {
+    var svc DetectedServices
+    seen := map[string]bool{}
+
+    add := func(category *[]string, name string) {
+        if !seen[name] {
+            *category = append(*category, name)
+            seen[name] = true
+        }
+    }
+
+    for _, mx := range records["MX"] {
+        lower := strings.ToLower(mx)
+        for pattern, service := range mxServicePatterns {
+            if strings.Contains(lower, pattern) {
+                add(&svc.Email, service)
+            }
+        }
+    }
+    return svc
+}
 ```
 
 ## What to Avoid
 
-- Don't query external DNS services — use `dns.resolver.resolve()` directly (uses system resolvers)
-- Don't treat `NoAnswer` and `NXDOMAIN` as the same — they mean different things
-- Don't concatenate TXT records naively — long SPF records are split across multiple TXT strings; join them before regex matching
+- Do not collapse NXDOMAIN and empty answer into one outcome.
+- Do not skip TCP fallback for truncated DNS responses.
+- Do not parse record strings generically when typed resource records are available.
+- Do not run service matching without case normalization.
 
 ## Constraints
 
-- `dnspython` exception types are typed, which is good (clean error handling)
-- CAA and SRV records are less commonly configured but still worth querying
-- Service detection is inherently limited to known patterns — new services require table maintenance
+- Resolver is currently fixed to `8.8.8.8:53` in implementation.
+- Service detection is pattern-based and only as complete as lookup maps.
+- TXT records can hold multiple provider/verifier signals and can be long.
 
 ## Origin
 
-Spike 001: `dns-record-enumeration`
-Source: `.planning/spikes/001-dns-record-enumeration/spike.py`
+Synthesized from spikes: 001
+
+Source files available in:
+- `sources/001-dns-record-enumeration/README.md`
+- `sources/001-dns-record-enumeration/dns.go`
+- `sources/001-dns-record-enumeration/types.go`
 
 **Key findings:**
-- All 9 record types query cleanly with `dnspython`
+- All 9 record types query cleanly with `miekg/dns`
 - SPF `include:` chains reveal SaaS tool usage
 - CAA records provide cert issuer policy (cross-reference with TLS spike)

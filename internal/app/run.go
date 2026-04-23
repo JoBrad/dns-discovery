@@ -14,10 +14,10 @@ type BatchSummary struct {
 	Failed    map[string]error
 }
 
-var domainRunner = executeDomain
+var testHookDomainRunner = executeDomain
 
 func RunDomain(domain string, outputDir string) error {
-	return domainRunner(domain, outputDir)
+	return testHookDomainRunner(domain, outputDir)
 }
 
 func RunBatch(domains []string, outputDir string) BatchSummary {

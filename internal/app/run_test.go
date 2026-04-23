@@ -5,14 +5,17 @@ import (
 	"testing"
 )
 
+// Verifies that RunDomain delegates to the injected runner seam instead of
+// directly calling executeDomain. It also asserts that domain/output arguments
+// are forwarded unchanged and that a successful runner returns nil.
 func TestRunDomainDelegatesToRunner(t *testing.T) {
-	original := domainRunner
+	original := testHookDomainRunner
 	defer func() {
-		domainRunner = original
+		testHookDomainRunner = original
 	}()
 
 	called := false
-	domainRunner = func(domain string, outputDir string) error {
+	testHookDomainRunner = func(domain string, outputDir string) error {
 		called = true
 		if domain != "github.com" {
 			t.Fatalf("unexpected domain: %q", domain)
@@ -31,6 +34,9 @@ func TestRunDomainDelegatesToRunner(t *testing.T) {
 	}
 }
 
+// Verifies batch aggregation behavior when domains have mixed outcomes.
+// Successful domains are collected in Succeeded, while runner errors are
+// recorded in Failed keyed by normalized domain name.
 func TestRunBatchCollectsMixedResults(t *testing.T) {
 	summary := runBatch([]string{"good.example", "bad.example"}, "output", func(domain string, outputDir string) error {
 		if domain == "bad.example" {
@@ -50,6 +56,9 @@ func TestRunBatchCollectsMixedResults(t *testing.T) {
 	}
 }
 
+// Verifies that runBatch trims/normalizes input domains and skips blank entries.
+// The runner should be invoked only for non-empty domains, and the summary total
+// should match the number of processed domains.
 func TestRunBatchSkipsBlankDomains(t *testing.T) {
 	called := 0
 	summary := runBatch([]string{" github.com ", "", "   ", "cloudflare.com"}, "output", func(domain string, outputDir string) error {

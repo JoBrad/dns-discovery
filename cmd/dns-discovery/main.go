@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -17,6 +18,8 @@ var configPath string
 var inputFile string
 
 const defaultConfigFile = ".dns-discovery.json"
+
+var domainFileLinePattern = regexp.MustCompile(`^[a-z0-9.-]+$`)
 
 var rootCmd = &cobra.Command{
 	Use:   "dns-discovery [domain]",
@@ -103,6 +106,9 @@ func resolveDomains(args []string, inputPath string, cfg appconfig.Config) ([]st
 }
 
 func loadDomainsFromFile(path string) ([]string, error) {
+	if !strings.HasSuffix(path, ".txt") {
+		return nil, fmt.Errorf("input file %q must have .txt extension", path)
+	}
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("read input file %q: %w", path, err)
@@ -116,7 +122,13 @@ func loadDomainsFromFile(path string) ([]string, error) {
 		if line == "" {
 			continue
 		}
-		domains = append(domains, strings.ToLower(line))
+
+		normalized := strings.ToLower(line)
+		if !domainFileLinePattern.MatchString(normalized) {
+			return nil, fmt.Errorf("invalid domain %q in input file %q: only letters, numbers, dots, and hyphens are allowed", line, path)
+		}
+
+		domains = append(domains, normalized)
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("read input file %q: %w", path, err)

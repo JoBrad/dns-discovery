@@ -1,5 +1,5 @@
-.github
-.venv
+.github/*
+.github/skills/*
+!.github/skills/spike-*/**
 
-__pycache__/
 output/

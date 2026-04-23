@@ -11,3 +11,4 @@
 ## Spike Findings
 
 - **DNS Zone Discovery** (implementation patterns, constraints, proven approaches) → Load from `.github/skills/spike-findings-dns-discovery/SKILL.md` when building DNS features
+- **Spike findings for dns-discovery** (implementation patterns, constraints, gotchas) → `Skill("spike-findings-dns-discovery")`

@@ -8,7 +8,7 @@ description: Implementation blueprint from spike experiments. Requirements, prov
 
 Build a DNS zone discovery tool that, given a domain name, produces an executive summary of the zone's configuration. Output includes registrar and nameserver identification (with friendly provider names), a list of configured services/hosts/redirects, and health checks for each service — validating email DNS (MX/SPF/DKIM/DMARC), TLS certificate validity, and minimum TLS 1.2+ for web-facing targets.
 
-Spike sessions wrapped: April 21, 2026
+Spike sessions wrapped: April 21-23, 2026 (refreshed to current Go implementation)
 </context>
 
 <requirements>
@@ -21,9 +21,9 @@ These requirements emerged from spike validation and **must** be honored in the 
 - Must check email DNS health: MX records present, SPF (v=spf1), DKIM (_domainkey), DMARC (_dmarc)
 - Must check TLS health for A/CNAME targets: valid cert, not expired, TLS 1.2+
 - Must produce a readable output (not just raw record dumps)
-- Use `dnspython` for all DNS queries (proven in 4 spikes)
-- Use stdlib `ssl` for TLS validation (no third-party TLS library)
-- Use stdlib `re` for pattern matching (SPF, DMARC, DKIM)
+- Use Go `github.com/miekg/dns` for DNS queries
+- Use Go stdlib `crypto/tls`, `crypto/x509`, and `net` for TLS validation
+- Use Go stdlib `regexp` and `strings` for SPF/DMARC/DKIM pattern checks
 - Gracefully handle non-HTTPS hosts (timeout, connection refused)
 - Support split DNS detection (multiple providers for one domain)
 - DKIM discovery via probe of ~27 common selectors (no enumeration API exists)
@@ -35,10 +35,10 @@ These requirements emerged from spike validation and **must** be honored in the 
 
 | Area | Reference | Key Spike Finding |
 |------|-----------|-------------------|
-| DNS Enumeration | references/dns-enumeration.md | All 9 record types (A, AAAA, MX, NS, TXT, CNAME, SOA, CAA, SRV) query cleanly with `dnspython`; SPF `include:` chains reveal SaaS tools |
+| DNS Enumeration | references/dns-enumeration.md | All 9 record types (A, AAAA, MX, NS, TXT, CNAME, SOA, CAA, SRV) query cleanly with `miekg/dns`; TXT joining preserves SPF analysis |
 | Provider Fingerprinting | references/provider-fingerprinting.md | Pattern table covers ~60 DNS providers; self-hosted detection handles tech giants; split DNS detection identifies redundancy architecture |
-| TLS Health Checks | references/tls-health.md | Stdlib `ssl` sufficient; OpenSSL verify codes distinguish expired vs self-signed vs hostname mismatch; days-until-expiry enables proactive warnings |
-| Email DNS Health | references/email-dns-health.md | Probe-based DKIM discovery (27 selectors) covers 90%+ of real deployments; selector names reveal provider (mandrill→Mailchimp); 4-pillar score (MX/SPF/DMARC/DKIM) |
+| TLS Health Checks | references/tls-health.md | Go stdlib TLS/X509 checks distinguish expired vs self-signed vs hostname mismatch/timeouts/refused; days-until-expiry enables proactive warnings |
+| Email DNS Health | references/email-dns-health.md | Probe-based DKIM discovery (27 selectors) covers common deployments; selector names reveal provider patterns; 4-pillar score (MX/SPF/DMARC/DKIM) |
 
 ## Source Files
 
@@ -61,5 +61,11 @@ All spikes tested on:
 - 003-tls-health-check (VALIDATED)
 - 004-email-dns-health (VALIDATED)
 
-**All 4 spikes VALIDATED ✓** — No blocking issues, all proof-of-concepts working with real domains.
+Refreshed against current production code in:
+- `internal/discovery/dns.go`
+- `internal/discovery/providers.go`
+- `internal/discovery/tls.go`
+- `internal/discovery/email.go`
+
+All 4 spikes remain VALIDATED with the Go implementation.
 </metadata>

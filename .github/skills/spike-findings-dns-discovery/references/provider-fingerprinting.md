@@ -10,58 +10,65 @@ Identify registrar and nameserver providers by matching NS hostnames against a l
 
 ## How to Build It
 
-**Install:** No external dependencies — pure string pattern matching.
+Use a deterministic ordered pattern table and a self-hosted shortcut.
 
-**Pattern:**
-```python
-import dns.resolver
+1. Normalize NS hostnames (lowercase, trim trailing dot).
+2. Detect self-hosted first: NS host ends with `.<domain>`.
+3. Match remaining hosts against ordered provider patterns (~60 entries).
+4. Accumulate provider counts and choose primary by max count.
+5. Mark split DNS when provider count map has more than one entry.
 
-# Ordered from most-specific to least-specific
-NS_PATTERNS = [
-    ("awsdns", "AWS Route 53"),
-    ("cloudflare.com", "Cloudflare"),
-    ("nsone.net", "NS1 / IBM NS1 Connect"),
-    ("googledomains.com", "Google Domains"),
-    ("azure-dns.com", "Azure DNS"),
-    ("digitaloceandns.com", "DigitalOcean DNS"),
-    # ... ~60 patterns total
-]
+```go
+func identifyNS(nsHost, domain string) string {
+    lower := strings.ToLower(strings.TrimSuffix(nsHost, "."))
+    if strings.HasSuffix(lower, "."+strings.ToLower(domain)) {
+        return "Self-hosted (under " + domain + ")"
+    }
+    for _, p := range nsPatterns {
+        if strings.Contains(lower, p.pattern) {
+            return p.provider
+        }
+    }
+    return "Unknown (" + lower + ")"
+}
 
-def identify_provider(ns_hostname, query_domain):
-    ns_lower = ns_hostname.rstrip(".").lower()
-    # Check self-hosted first
-    if ns_lower.endswith("." + query_domain.lower()):
-        return f"Self-hosted (under {query_domain})"
-    # Check pattern table
-    for pattern, provider in NS_PATTERNS:
-        if pattern in ns_lower:
-            return provider
-    return "Unknown"
-
-# Query and fingerprint
-answers = dns.resolver.resolve(domain, "NS")
-ns_hosts = [str(r).rstrip(".") for r in answers]
-providers = Counter(identify_provider(ns, domain) for ns in ns_hosts)
-primary = providers.most_common(1)[0][0]
-is_split = len(providers) > 1
+func IdentifyProviders(domain string, nsHosts []string) ProviderResult {
+    result := ProviderResult{Counts: make(map[string]int), AllHosts: nsHosts}
+    for _, ns := range nsHosts {
+        provider := identifyNS(ns, domain)
+        result.Counts[provider]++
+    }
+    for provider, count := range result.Counts {
+        if count > result.Counts[result.Primary] || result.Primary == "" {
+            result.Primary = provider
+        }
+    }
+    result.IsSplit = len(result.Counts) > 1
+    return result
+}
 ```
 
 ## What to Avoid
 
-- Don't rely on exact NS hostname matching — pattern matching is more robust
-- Don't assume the provider with most NS records is the only one — split DNS is real (e.g., github.com: NS1 + Route53)
-- Don't guess for "Unknown" providers — surface the raw hostname when unknown
+- Do not use exact hostname lookup only; substring patterns are required.
+- Do not run generic pattern checks before self-hosted check.
+- Do not hide split-provider counts when ties occur.
+- Do not map unknown providers to nearest known provider.
 
 ## Constraints
 
-- The lookup table is not exhaustive — new DNS providers require manual entry
-- "Unknown" will appear for truly bespoke infrastructure or small/new providers
-- Order matters: most-specific patterns must come before less-specific ones (e.g., check "azure-dns.com" before "dns.com")
+- Provider table maintenance is ongoing work as DNS ecosystems change.
+- Pattern order matters; keep specific suffixes ahead of generic tokens.
+- Unknown results are valid and should remain explicit.
 
 ## Origin
 
-Spike 002: `ns-registrar-fingerprinting`
-Source: `.planning/spikes/002-ns-registrar-fingerprinting/spike.py`
+Synthesized from spikes: 002
+
+Source files available in:
+- `sources/002-ns-registrar-fingerprinting/README.md`
+- `sources/002-ns-registrar-fingerprinting/providers.go`
+- `sources/002-ns-registrar-fingerprinting/types.go`
 
 **Key findings:**
 - Pattern table covers ~60 providers with high accuracy

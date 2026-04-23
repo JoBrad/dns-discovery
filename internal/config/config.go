@@ -16,6 +16,12 @@ type Config struct {
 }
 
 func Load(path string) (Config, error) {
+	if strings.TrimSpace(path) == "" {
+		return Config{}, fmt.Errorf("config path must not be empty")
+	}
+	if !strings.HasSuffix(path, ".json") {
+		return Config{}, fmt.Errorf("config file %q must have .json extension", path)
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return Config{}, fmt.Errorf("load config %q: %w", path, err)

@@ -10,117 +10,85 @@ Validate email infrastructure by checking MX, SPF, DMARC, and DKIM records.
 
 ## How to Build It
 
-**Install:** Use `dnspython` for DNS queries, stdlib `re` for pattern matching.
+Use existing DNS query helpers plus regex-based policy parsing.
 
-**MX Records:**
-```python
-import dns.resolver
+1. Query MX records and format as `priority hostname`.
+2. Query TXT at zone apex; detect SPF (`v=spf1`) and evaluate policy/risks.
+3. Query TXT at `_dmarc.<domain>` and parse policy/reporting flags.
+4. Probe 27 common DKIM selectors at `<selector>._domainkey.<domain>`.
+5. Compute 4-pillar score: MX, SPF, DMARC, DKIM.
 
-def query_mx(domain):
-    try:
-        answers = dns.resolver.resolve(domain, "MX")
-        return sorted([(r.preference, str(r.exchange).rstrip(".")) for r in answers])
-    except Exception:
-        return []
+```go
+func EvaluateEmailHealth(domain string) EmailResult {
+    result := EmailResult{}
+    result.MXRecords = QueryMX(domain)
+    result.SPF = checkSPF(domain)
+    result.DMARC = checkDMARC(domain)
+    result.DKIM = checkDKIM(domain)
+
+    score := 0
+    if len(result.MXRecords) > 0 { score++ }
+    if result.SPF.Present { score++ }
+    if result.DMARC.Present { score++ }
+    if len(result.DKIM) > 0 { score++ }
+
+    result.Score = score
+    result.ScoreText = string(rune('0'+score)) + "/4"
+    return result
+}
 ```
 
-**SPF Detection:**
-```python
-import re
+```go
+var reSPFAll = regexp.MustCompile(`([~\-\+\?])all\b`)
 
-def check_spf(domain):
-    txt_records = query_txt(domain)
-    spf_records = [t for t in txt_records if t.startswith("v=spf1")]
-    
-    if not spf_records:
-        return {"present": False, "issues": ["No SPF record found"]}
-    
-    if len(spf_records) > 1:
-        return {"present": True, "issues": [f"Multiple SPF records ({len(spf_records)}) — only one allowed"]}
-    
-    spf = spf_records[0]
-    issues = []
-    
-    # Check for 'all' mechanism
-    if not re.search(r'[~\-\+\?]all\b', spf):
-        issues.append("Missing 'all' mechanism")
-    
-    # Classify policy
-    if "~all" in spf:
-        qualifier = "softfail (~all) — recommended"
-    elif "-all" in spf:
-        qualifier = "hardfail (-all) — strictest"
-    else:
-        qualifier = "unknown"
-    
-    return {"present": True, "valid": len(issues) == 0, "qualifier": qualifier, "issues": issues}
+func checkSPF(domain string) SPFResult {
+    txts := QueryTXT(domain)
+    // select all v=spf1 records, warn on multiples
+    // parse all mechanism and classify hardfail/softfail/neutral/pass
+}
 ```
 
-**DMARC Detection:**
-```python
-def check_dmarc(domain):
-    dmarc_domain = f"_dmarc.{domain}"
-    txt_records = query_txt(dmarc_domain)
-    dmarc_records = [t for t in txt_records if t.startswith("v=DMARC1")]
-    
-    if not dmarc_records:
-        return {"present": False}
-    
-    dmarc = dmarc_records[0]
-    policy_match = re.search(r'\bp=(\w+)', dmarc)
-    policy = policy_match.group(1) if policy_match else "none"
-    has_rua = "rua=" in dmarc
-    has_ruf = "ruf=" in dmarc
-    
-    return {
-        "present": True,
-        "policy": policy,  # none, quarantine, reject
-        "has_aggregate_reports": has_rua,
-        "has_forensic_reports": has_ruf,
+```go
+var reDMARCPol = regexp.MustCompile(`\bp=(\w+)`)
+
+func checkDMARC(domain string) DMARCResult {
+    txts := QueryTXT("_dmarc." + domain)
+    // find v=DMARC1, parse p= value, check rua=/ruf=
+}
+```
+
+```go
+func checkDKIM(domain string) []DKIMSelector {
+    var found []DKIMSelector
+    for _, sel := range dkimSelectors { // 27 selectors
+        txts := QueryTXT(sel + "._domainkey." + domain)
+        // detect v=DKIM1/p=, parse key type, mark revoked on empty p=
     }
-```
-
-**DKIM Discovery (Probe-based):**
-```python
-DKIM_SELECTORS = [
-    "google", "selector1", "selector2", "default", "mail",
-    "k1", "k2", "s1", "s2", "smtp", "dkim",
-    "mandrill", "mailjet", "sendgrid", "sparkpost",
-    # ... 27 total
-]
-
-def check_dkim(domain):
-    found = []
-    for selector in DKIM_SELECTORS:
-        dkim_domain = f"{selector}._domainkey.{domain}"
-        txt_records = query_txt(dkim_domain)
-        dkim_records = [t for t in txt_records if "v=DKIM1" in t or "p=" in t]
-        if dkim_records:
-            record = dkim_records[0]
-            key_type_match = re.search(r'k=(\w+)', record)
-            key_type = key_type_match.group(1) if key_type_match else "rsa"
-            revoked = bool(re.search(r'p=\s*;|p=\s*$', record))
-            found.append({"selector": selector, "key_type": key_type, "revoked": revoked})
-    
-    return {"present": len(found) > 0, "selectors_found": found}
+    return found
+}
 ```
 
 ## What to Avoid
 
-- Don't assume DKIM is absent if probe finds no selectors — selector names are not standardized; the probe list covers ~90% but not all
-- Don't treat multiple SPF records as data, only warn — only one is valid per DNS spec
-- Don't forget to join split TXT records (long SPF strings) before regex matching
+- Do not assume DKIM absence means no DKIM exists; selector probing is partial.
+- Do not pass multiple SPF records silently as valid.
+- Do not parse SPF/DMARC without regex validation of key fields.
+- Do not block full discovery if one email pillar fails.
 
 ## Constraints
 
-- DKIM discovery is probe-based, not exhaustive — unknown selectors will be missed
-- SPF chains can be arbitrarily deep — follow 1-2 levels for performance, not all chains
-- DMARC policy values: `none` (monitoring only), `quarantine` (tag suspicious), `reject` (fail)
+- DKIM discovery is probe-based and inherently incomplete.
+- SPF and TXT records vary widely by provider and can include many includes/verifications.
+- DMARC policy semantics remain `none`, `quarantine`, `reject`.
 
 ## Origin
 
-Spike 004: `email-dns-health`
-Source: `.planning/spikes/004-email-dns-health/spike.py`
+Synthesized from spikes: 004
+
+Source files available in:
+- `sources/004-email-dns-health/README.md`
+- `sources/004-email-dns-health/email.go`
+- `sources/004-email-dns-health/types.go`
 
 **Key findings:**
 - DKIM probe list covers 27 selectors — covers Microsoft 365, Google, Mandrill, Amazon SES, Zoho, Fastmail

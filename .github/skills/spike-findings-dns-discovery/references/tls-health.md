@@ -11,92 +11,66 @@ Connect to a hostname via TLS and verify certificate validity, expiry, and proto
 
 ## How to Build It
 
-**Install:** No external dependencies — use stdlib `ssl` + `socket`.
+Use Go stdlib only (`crypto/tls`, `crypto/x509`, `net`, `time`).
 
-**Pattern:**
-```python
-import ssl
-import socket
-from datetime import datetime, timezone
+1. Dial `hostname:443` with a short timeout (5s).
+2. Use `tls.DialWithDialer` with `ServerName` set for hostname verification.
+3. On success, extract TLS version and peer certificate metadata.
+4. Compute days-to-expiry and warning window (<14 days).
+5. On failure, classify errors into stable categories for reporting.
 
-def check_tls(hostname, port=443, timeout=5):
-    result = {
-        "hostname": hostname,
-        "reachable": False,
-        "tls_version": None,
-        "cert_valid": False,
-        "cert_expired": False,
-        "cert_expiry": None,
-        "days_until_expiry": None,
-        "error": None,
+```go
+func CheckTLS(hostname string) TLSResult {
+    result := TLSResult{Hostname: hostname}
+    dialer := &net.Dialer{Timeout: 5 * time.Second}
+
+    conn, err := tls.DialWithDialer(dialer, "tcp", hostname+":443", &tls.Config{ServerName: hostname})
+    if err == nil {
+        defer conn.Close()
+        result.Reachable = true
+        result.CertValid = true
+
+        state := conn.ConnectionState()
+        result.TLSVersion = tlsVersionName(state.Version)
+        if len(state.PeerCertificates) > 0 {
+            cert := state.PeerCertificates[0]
+            result.CertExpiry = cert.NotAfter.UTC().Format("2006-01-02")
+            result.DaysToExpiry = int(time.Until(cert.NotAfter).Hours() / 24)
+            result.CertExpired = result.DaysToExpiry < 0
+            result.ExpiryWarning = result.DaysToExpiry >= 0 && result.DaysToExpiry < 14
+        }
+        return result
     }
-    
-    ctx = ssl.create_default_context()
-    
-    try:
-        with socket.create_connection((hostname, port), timeout=timeout) as sock:
-            with ctx.wrap_socket(sock, server_hostname=hostname) as ssock:
-                result["reachable"] = True
-                result["tls_version"] = ssock.version()
-                
-                cert = ssock.getpeercert()
-                
-                # Parse expiry date
-                expiry_str = cert.get("notAfter", "")
-                if expiry_str:
-                    expiry_dt = datetime.strptime(expiry_str, "%b %d %H:%M:%S %Y %Z")
-                    expiry_dt = expiry_dt.replace(tzinfo=timezone.utc)
-                    now = datetime.now(timezone.utc)
-                    days_left = (expiry_dt - now).days
-                    result["cert_expiry"] = expiry_dt.strftime("%Y-%m-%d")
-                    result["days_until_expiry"] = days_left
-                    result["cert_expired"] = days_left < 0
-                
-                result["cert_valid"] = not result["cert_expired"]
-                
-    except ssl.SSLCertVerificationError as e:
-        result["reachable"] = True
-        result["cert_valid"] = False
-        # Map verify_code to specific error
-        code = getattr(e, "verify_code", None)
-        if code == 10:
-            result["error"] = "Certificate EXPIRED"
-            result["cert_expired"] = True
-        elif code in (18, 19):
-            result["error"] = "Self-signed certificate (not trusted)"
-        elif code == 62:
-            result["error"] = "Hostname mismatch"
-        else:
-            result["error"] = f"Cert verification failed: {e.reason}"
-    
-    except socket.timeout:
-        result["error"] = f"Timeout after {timeout}s"
-    except ConnectionRefusedError:
-        result["error"] = "Connection refused (port 443 not open)"
-    except socket.gaierror as e:
-        result["error"] = f"DNS resolution failed: {e}"
-    
-    return result
+
+    // classify x509 and network failures
+    // EXPIRED, SELF_SIGNED, HOSTNAME_MISMATCH, TIMEOUT, REFUSED, DNS_ERROR, TLS_ERROR
+    return classifyTLSError(result, err)
+}
 ```
 
 ## What to Avoid
 
-- Don't ignore OpenSSL error codes — different verify_code values mean different failure modes (expired vs self-signed vs hostname mismatch)
-- Don't assume all A records point to HTTPS servers — gracefully handle ConnectionRefused and Timeout
-- Don't use a long timeout — 5 seconds is reasonable for health checks
+- Do not skip `ServerName` in TLS config or hostname checks break.
+- Do not treat all TLS failures as generic handshake errors.
+- Do not hard-fail discovery on non-HTTPS endpoints.
+- Do not use long dial timeouts in batch scans.
 
 ## Constraints
 
-- Port 443 must be open — non-HTTPS services will timeout or refuse
-- TLS handshake can reveal the issuer, but SANs and subject CN extraction requires parsing `getpeercert()` carefully
-- Certificate chain validation happens inside `ssl.create_default_context()` — can't customize without disabling security
+- Port 443 must be reachable for successful health checks.
+- Certificate validity is evaluated by system trust roots.
+- TLS version names should be normalized for reporting consistency.
 
 ## Origin
 
-Spike 003: `tls-health-check`
-Source: `.planning/spikes/003-tls-health-check/spike.py`
+Synthesized from spikes: 003
+
+Source files available in:
+- `sources/003-tls-health-check/README.md`
+- `sources/003-tls-health-check/tls.go`
+- `sources/003-tls-health-check/types.go`
 
 **Key findings:**
-- Stdlib `ssl` is sufficient — no third-party dependency needed
-- OpenSSL verify codes (10, 18/19, 62) map to specific failure modes
+- Go stdlib TLS/X509 stack is sufficient — no third-party dependency needed
+- Error categories can be mapped to actionable outcomes
 - CAA records from DNS spike can be cross-referenced with cert issuer from TLS spike
