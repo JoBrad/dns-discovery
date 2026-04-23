@@ -88,6 +88,31 @@ Plan list:
 | 1 | CLI Tool Foundation | ✅ Complete | 2 | Core discovery engine + CLI |
 | 2 | Reporting & Output | ✅ Complete | 1 | Complete Markdown reports |
 | 3 | Integration & Polish | Built (verify pending) | 2 | Config, batch mode, error handling |
+| 4 | Modular output and logging | Ready to execute | 2 | Configurable output flavors and logging architecture |
+
+### Phase 4: Modular output and logging
+
+**Goal:** Separate orchestration, reporting, and logging so output flavor and logging behavior are configurable without changing discovery logic.
+
+**Status:** Ready to execute
+
+**Plans:** 2 plans
+
+Plan list:
+- [ ] 04-01-PLAN.md — Add output/logging contracts in config and CLI, and introduce logging sink setup
+- [ ] 04-02-PLAN.md — Refactor run orchestration to `RunDiscovery` and route markdown/json/text rendering via report package
+
+**Requirement IDs:** MOD-01, MOD-02, MOD-03, MOD-04, LOG-01, LOG-02, LOG-03, ERR-02
+
+**Dependencies:** Phase 3 complete
+
+**Deliverables:**
+- Output flavor selection using `output` (`markdown`, `json`, `text`) with `markdown` default
+- Configurable log location with precedence CLI > config > default
+- Verbose logging mode with file + stdout behavior while default remains error-level logging to file
+- Unified app orchestration entrypoint (`RunDiscovery`) for single and batch flows
+- Ordered success/failure batch summaries with per-domain detail
+- Rendering delegated to `internal/report` for all supported output flavors
 
 ---
 

@@ -62,6 +62,26 @@
 
 ---
 
+### Phase 4: Modular output and logging
+
+**Phase Goal:** Separate orchestration, reporting, and logging so output flavor and logging behavior are configurable without changing discovery logic.
+
+**Requirement IDs for Phase 4:**
+
+| ID | Category | Requirement | UAT |
+|---|---|---|---|
+| MOD-01 | Output Contract | Tool accepts `output` values `markdown`, `json`, `text` with `markdown` default | Running without output selection still writes markdown reports; selecting json/text writes files in selected flavor |
+| MOD-02 | Orchestration | Single public app entrypoint orchestrates single and batch discovery (`RunDiscovery`) | Single-domain and batch runs both call the same orchestration function and preserve existing scan behavior |
+| MOD-03 | Batch Summary | Batch result tracks deterministic ordered success and ordered failure lists with per-domain detail | Mixed run returns stable order in both success and failure outputs across repeated invocations |
+| MOD-04 | Reporting Layer | Output flavor rendering lives in `internal/report` and is selected by `output` | Markdown/json/text renderers are in report package and app layer delegates to them |
+| MOD-05 | Code Hygiene | Once modular output/logging refactor is complete, remove obsolete/unused functions left behind by the previous flow | Deprecated orchestration/presentation helpers removed and code paths are singular and current |
+| LOG-01 | Log Defaults | Default log level is error and default log file path is `logs/` under repo root | Running without log flags/config writes error-level logs to default log location |
+| LOG-02 | Log Config Precedence | `logLocation` can be set via config or CLI with precedence CLI > config > default | CLI log path overrides config path; config path applies when CLI not set |
+| LOG-03 | Verbose Logging | `verbose` mode increases log verbosity and includes stdout log streaming while retaining file logging | Verbose run emits additional operational logs to stdout and file; non-verbose run does not |
+| ERR-02 | Error Surfacing | Runtime errors are written to log output and surfaced on stderr with actionable context | Forced failures appear in stderr and are present in log file with domain-level context |
+
+---
+
 ## Validation Approach
 
 **End-of-Phase Verification:** Run tool on github.com and cloudflare.com, verify all 4 categories (DNS, Providers, TLS, Email) produce correct output matching spike validation results.
