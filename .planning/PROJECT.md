@@ -117,4 +117,26 @@ When Phase 1 is complete:
 
 ---
 
-*Initialized via project setup. Next: Phase 1 planning.*
+## Current State
+
+**Shipped:** v1.0 — 2026-04-23  
+**Status:** Milestone complete. 34/34 requirements satisfied.  
+**Codebase:** 3,342 lines Go across `cmd/`, `internal/discovery`, `internal/app`, `internal/report`, `internal/config`  
+**Stack:** Go 1.23+, cobra, miekg/dns, crypto/tls stdlib  
+
+### Validated Requirements (v1.0)
+
+- ✓ CLI accepts domain argument and batch sources — v1.0
+- ✓ DNS enumeration (9 record types), provider fingerprinting (~60), split DNS detection — v1.0
+- ✓ Email DNS health scoring (MX/SPF/DMARC/DKIM 4-pillar) with 27-selector DKIM probing — v1.0
+- ✓ TLS cert validation, expiry warnings, TLS version detection — v1.0
+- ✓ Markdown/JSON/text output flavors with configurable output dir and log location — v1.0
+- ✓ Unified RunDiscovery orchestration with deterministic batch summaries — v1.0
+
+## Next Milestone Goals
+
+To be defined via `/gsd-new-milestone`.
+
+---
+
+*Last updated: 2026-04-23 after v1.0 milestone*
