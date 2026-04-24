@@ -1,119 +1,35 @@
 # Project Roadmap
 
 **Project:** DNS Zone Discovery Tool  
-**Version:** 1.0  
-**Last Updated:** April 22, 2026
+**Last Updated:** 2026-04-23
 
-## Milestone 1: Core Implementation
+## Milestones
 
-### Phase 1: CLI Tool Foundation
+- ✅ **v1.0 Core Implementation** — Phases 1–4 (shipped 2026-04-23)
 
-**Goal:** Build the core discovery engine with DNS enumeration, provider identification, TLS checks, and email health validation integrated into a working CLI.
+## Phases
 
-**Status:** ✅ Complete
+<details>
+<summary>✅ v1.0 Core Implementation (Phases 1–4) — SHIPPED 2026-04-23</summary>
 
-**Plans:** 2 plans
+- [x] Phase 1: CLI Tool Foundation (2/2 plans) — completed 2026-04-23
+- [x] Phase 2: Reporting & Output (1/1 plan) — completed 2026-04-23
+- [x] Phase 3: Integration & Polish (2/2 plans) — completed 2026-04-23
+- [x] Phase 4: Modular Output and Logging (2/2 plans) — completed 2026-04-23
 
-Plan list:
-- [x] 01-01-PLAN.md — Build Go CLI foundation, DNS enumeration, and provider fingerprinting
-- [x] 01-02-PLAN.md — Add TLS/email health pillars and render executive summary
+Full details: `.planning/milestones/v1.0-ROADMAP.md`
 
-**Requirement IDs:** CLI-01, ENUM-01, ENUM-02, PROV-01, PROV-02, PROV-03, EMAIL-01, EMAIL-02, EMAIL-03, EMAIL-04, EMAIL-05, TLS-01, TLS-02, TLS-03, TLS-04, OUT-01, OUT-02
+</details>
 
-**Dependencies:** None — first phase
+## Progress
 
-**Deliverables:**
-- Core discovery engine (`internal/discovery/` package)
-- CLI interface accepting domain argument
-- All health checks integrated
-- Output formatting (stdout printing)
-- Passes UAT on github.com and cloudflare.com
-
----
-
-### Phase 2: Reporting & Output
-
-**Goal:** Enrich the Markdown report to match the full stdout output (DNS records table, detected services, split DNS detail, complete email/TLS sections) and ensure generated reports are gitignored.
-
-**Status:** ✅ Complete
-
-**Plans:** 1 plan
-
-Plan list:
-- [x] 02-01-PLAN.md — Enrich GenerateMarkdown to cover all stdout sections; add output/ to .gitignore
-
-**Requirement IDs:** RPT-01, RPT-02, RPT-03
-
-**Dependencies:** Phase 1 complete
-
-**Deliverables:**
-- Markdown report includes DNS records table (all 9 types)
-- Markdown report includes detected services (email, hosting/CDN, verification)
-- Markdown report includes split DNS detail
-- Markdown report includes MX records with priorities
-- Markdown report includes TLS version and days-to-expiry
-- `output/` directory is gitignored
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
+| 1. CLI Tool Foundation | v1.0 | 2/2 | ✅ Complete | 2026-04-23 |
+| 2. Reporting & Output | v1.0 | 1/1 | ✅ Complete | 2026-04-23 |
+| 3. Integration & Polish | v1.0 | 2/2 | ✅ Complete | 2026-04-23 |
+| 4. Modular Output & Logging | v1.0 | 2/2 | ✅ Complete | 2026-04-23 |
 
 ---
 
-### Phase 3: Integration & Polish
-
-**Goal:** Add config file support, batch processing, and resilient error handling for multi-domain runs.
-
-**Status:** Built (verify pending)
-
-**Plans:** 2 plans
-
-Plan list:
-- [x] 03-01-PLAN.md — Add JSON config loading, defaults, and CLI override precedence
-- [x] 03-02-PLAN.md — Add batch domain processing and aggregate error reporting
-
-**Requirement IDs:** CFG-01, CFG-02, BAT-01, BAT-02, ERR-01
-
-**Dependencies:** Phase 2 complete
-
-**Deliverables:**
-- Optional config file support via `.dns-discovery.json` or `--config`
-- CLI flags override config values predictably
-- Batch processing from config or input file
-- Per-domain failures do not abort whole batch runs
-- Batch runs finish with a clear success/failure summary and non-zero exit on failures
-
----
-
-## Summary
-
-| Phase | Title | Status | Plans | Deliverable |
-|-------|-------|--------|-------|-------------|
-| 1 | CLI Tool Foundation | ✅ Complete | 2 | Core discovery engine + CLI |
-| 2 | Reporting & Output | ✅ Complete | 1 | Complete Markdown reports |
-| 3 | Integration & Polish | Built (verify pending) | 2 | Config, batch mode, error handling |
-| 4 | Modular output and logging | Ready to execute | 2 | Configurable output flavors and logging architecture |
-
-### Phase 4: Modular output and logging
-
-**Goal:** Separate orchestration, reporting, and logging so output flavor and logging behavior are configurable without changing discovery logic.
-
-**Status:** Ready to execute
-
-**Plans:** 2 plans
-
-Plan list:
-- [ ] 04-01-PLAN.md — Add output/logging contracts in config and CLI, and introduce logging sink setup
-- [ ] 04-02-PLAN.md — Refactor run orchestration to `RunDiscovery` and route markdown/json/text rendering via report package
-
-**Requirement IDs:** MOD-01, MOD-02, MOD-03, MOD-04, LOG-01, LOG-02, LOG-03, ERR-02
-
-**Dependencies:** Phase 3 complete
-
-**Deliverables:**
-- Output flavor selection using `output` (`markdown`, `json`, `text`) with `markdown` default
-- Configurable log location with precedence CLI > config > default
-- Verbose logging mode with file + stdout behavior while default remains error-level logging to file
-- Unified app orchestration entrypoint (`RunDiscovery`) for single and batch flows
-- Ordered success/failure batch summaries with per-domain detail
-- Rendering delegated to `internal/report` for all supported output flavors
-
----
-
-*Initialized from README.md and spike validation results. Phase 1 complete.*
+*v1.0 shipped. Start next milestone with `/gsd-new-milestone`.*

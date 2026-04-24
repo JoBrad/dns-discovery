@@ -1,13 +1,13 @@
 ---
-phase: 03
-slug: integration
+phase: 04
+slug: modular-output-and-logging
 status: complete
 nyquist_compliant: true
 wave_0_complete: true
 created: 2026-04-23
 ---
 
-# Phase 03 — Validation Strategy
+# Phase 04 — Validation Strategy
 
 > Per-phase validation contract for feedback sampling during execution.
 
@@ -19,7 +19,7 @@ created: 2026-04-23
 |----------|-------|
 | **Framework** | go test |
 | **Config file** | none |
-| **Quick run command** | `go test ./internal/config ./internal/app ./cmd/dns-discovery` |
+| **Quick run command** | `go test ./internal/config ./internal/app ./internal/report ./cmd/dns-discovery` |
 | **Full suite command** | `go test ./...` |
 | **Estimated runtime** | ~15 seconds |
 
@@ -27,7 +27,7 @@ created: 2026-04-23
 
 ## Sampling Rate
 
-- **After every task commit:** Run `go test ./internal/config ./internal/app ./cmd/dns-discovery`
+- **After every task commit:** Run `go test ./internal/config ./internal/app ./internal/report ./cmd/dns-discovery`
 - **After every plan wave:** Run `go test ./...`
 - **Before `/gsd-verify-work`:** Full suite must be green
 - **Max feedback latency:** 60 seconds
@@ -38,10 +38,10 @@ created: 2026-04-23
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 03-01-01 | 01 | 1 | CFG-01 | T-03-01 / T-03-02 | Reject malformed config and fail fast with file-aware parse errors. | unit | `go test ./internal/config -run 'TestLoad'` | ✅ | ✅ green |
-| 03-01-02 | 01 | 1 | CFG-02 | T-03-01 / — | Enforce precedence `flags > config > defaults` without unsafe side effects. | unit | `go test ./internal/config -run 'TestResolvePrefersFlagOverConfig' && go build ./...` | ✅ | ✅ green |
-| 03-02-01 | 02 | 2 | BAT-02 | T-03-04 / T-03-05 | Continue batch execution after per-domain failures and isolate errors by domain. | unit | `go test ./internal/app -run 'TestRunBatch'` | ✅ | ✅ green |
-| 03-02-02 | 02 | 2 | BAT-01, ERR-01 | T-03-04 / T-03-06 | Accept valid `.txt` domain input, reject invalid entries, and preserve actionable failures. | unit | `go test ./cmd/dns-discovery -run 'TestLoadDomainsFrom' && go test ./internal/config` | ✅ | ✅ green |
+| 04-01-01 | 01 | 1 | MOD-01 | — | Output enum validated; unsupported values rejected fast before scan execution. | unit | `go test ./internal/config ./cmd/dns-discovery -run 'TestLoad\|TestResolve'` | ✅ | ✅ green |
+| 04-01-02 | 01 | 1 | LOG-01, LOG-02, LOG-03 | — | Log location resolves with CLI > config > default precedence; verbose flag exposed at app boundary. | unit | `go test ./internal/app -run 'TestValidateOutput'` && `go build ./...` | ✅ | ✅ green |
+| 04-02-01 | 02 | 2 | MOD-02, MOD-03 | T-04-05 | Deterministic ordered success/failure from unified RunDiscovery; per-domain failures do not abort batch. | unit | `go test ./internal/app ./cmd/dns-discovery -run 'TestRunDiscovery'` | ✅ | ✅ green |
+| 04-02-02 | 02 | 2 | MOD-04, ERR-02 | T-04-04 / T-04-06 | Explicit output enum dispatch; render/write errors surfaced with domain context to stderr and log sink. | unit | `go test ./internal/report ./internal/app ./cmd/dns-discovery && go build ./...` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -69,11 +69,3 @@ All phase behaviors have automated verification.
 - [x] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** approved 2026-04-23
-
-## Validation Audit 2026-04-23 (Re-audit)
-
-| Metric | Count |
-|--------|-------|
-| Gaps found | 0 |
-| Resolved | 0 |
-| Escalated | 0 |
